@@ -1,203 +1,91 @@
 package auth
 
 import (
-	"strings"
+	"errors"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
 
-	"ifs24051-pabwe2026-sk-p9-be-golang-gin/internal/middleware"
-	"ifs24051-pabwe2026-sk-p9-be-golang-gin/internal/response"
+	"app/internal/middleware"
+	"app/internal/response"
 )
 
-type Handler struct {
-	DB     *gorm.DB
-	Secret string
-}
+// Handler adalah controller endpoint /api/auth/*.
+type Handler struct{ svc *Service }
 
-type input struct {
-	Username string `json:"username"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
-}
+// NewHandler membuat Handler.
+func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 
-// Register digunakan untuk mendaftarkan pengguna baru.
-func (h Handler) Register(c *gin.Context) {
-	var in input
-
-	if err := c.ShouldBindJSON(&in); err != nil {
-		response.Fail(c, 400, "Payload tidak valid")
+// Register godoc: POST /api/auth/register.
+func (h *Handler) Register(c *gin.Context) {
+	var req RegisterRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, 400, "Data registrasi tidak valid: "+err.Error())
 		return
 	}
-
-	username := strings.TrimSpace(in.Username)
-	email := strings.ToLower(strings.TrimSpace(in.Email))
-
-	if username == "" || email == "" || len(in.Password) < 8 {
-		response.Fail(c, 400, "Username, email, dan password minimal 8 karakter wajib diisi")
-		return
-	}
-
-	hash, err := bcrypt.GenerateFromPassword(
-		[]byte(in.Password),
-		bcrypt.DefaultCost,
-	)
-
+	res, err := h.svc.Register(req)
 	if err != nil {
-		response.Error(c, err)
+		writeError(c, err)
 		return
 	}
-
-	u := User{
-		Username: username,
-		Email:    email,
-		Password: string(hash),
-		Role:     "author",
-	}
-
-	if err := h.DB.Create(&u).Error; err != nil {
-		response.Fail(c, 409, "Username atau email sudah digunakan")
-		return
-	}
-
-	u.Password = ""
-
-	response.Success(c, 201, "Registrasi berhasil", u)
+	response.Success(c, 201, "Registrasi berhasil", res)
 }
 
-// Login digunakan untuk autentikasi pengguna.
-func (h Handler) Login(c *gin.Context) {
-	var in input
-
-	if err := c.ShouldBindJSON(&in); err != nil {
-		response.Fail(c, 400, "Payload tidak valid")
+// Login godoc: POST /api/auth/login.
+func (h *Handler) Login(c *gin.Context) {
+	var req LoginRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, 400, "Username dan password wajib diisi")
 		return
 	}
-
-	login := strings.TrimSpace(in.Username)
-
-	if login == "" || in.Password == "" {
-		response.Fail(c, 400, "Username/email dan password wajib diisi")
-		return
-	}
-
-	var u User
-
-	err := h.DB.Where(
-		"username = ? OR email = ?",
-		login,
-		strings.ToLower(login),
-	).First(&u).Error
-
+	res, err := h.svc.Login(req)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			response.Fail(c, 401, "Username/email atau password salah")
-			return
-		}
-
-		response.Error(c, err)
+		writeError(c, err)
 		return
 	}
+	response.Success(c, 200, "Login berhasil", res)
+}
 
-	if err := bcrypt.CompareHashAndPassword(
-		[]byte(u.Password),
-		[]byte(in.Password),
-	); err != nil {
-		response.Fail(c, 401, "Username/email atau password salah")
-		return
-	}
+// Logout godoc: POST /api/auth/logout (token JWT bersifat stateless).
+func (h *Handler) Logout(c *gin.Context) {
+	response.Success(c, 200, "Logout berhasil", nil)
+}
 
-	token, err := middleware.CreateToken(
-		u.ID,
-		u.Role,
-		h.Secret,
-	)
-
+// Profile godoc: GET /api/auth/profile.
+func (h *Handler) Profile(c *gin.Context) {
+	u, _ := middleware.CurrentUser(c)
+	res, err := h.svc.Profile(u.ID)
 	if err != nil {
-		response.Error(c, err)
+		writeError(c, err)
 		return
 	}
-
-	u.Password = ""
-
-	response.Success(c, 200, "Login berhasil", gin.H{
-		"token": token,
-		"user":  u,
-	})
+	response.Success(c, 200, "Profil berhasil diambil", res)
 }
 
-// Profile digunakan untuk mengambil profil pengguna.
-func (h Handler) Profile(c *gin.Context) {
-	id, exists := c.Get("userID")
-
-	if !exists {
-		response.Fail(c, 401, "Pengguna belum terautentikasi")
+// UpdateProfile godoc: PUT /api/auth/profile.
+func (h *Handler) UpdateProfile(c *gin.Context) {
+	var req UpdateProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, 400, "Data profil tidak valid: "+err.Error())
 		return
 	}
-
-	var u User
-
-	if err := h.DB.First(&u, id).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			response.Fail(c, 404, "Pengguna tidak ditemukan")
-			return
-		}
-
-		response.Error(c, err)
+	u, _ := middleware.CurrentUser(c)
+	res, err := h.svc.UpdateProfile(u.ID, req)
+	if err != nil {
+		writeError(c, err)
 		return
 	}
-
-	u.Password = ""
-
-	response.Success(c, 200, "Profil berhasil diambil", u)
+	response.Success(c, 200, "Profil berhasil diperbarui", res)
 }
 
-// UpdateProfile digunakan untuk memperbarui profil pengguna.
-func (h Handler) UpdateProfile(c *gin.Context) {
-	id, exists := c.Get("userID")
-
-	if !exists {
-		response.Fail(c, 401, "Pengguna belum terautentikasi")
-		return
+func writeError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, ErrUsernameTaken), errors.Is(err, ErrEmailTaken):
+		response.Fail(c, 409, err.Error())
+	case errors.Is(err, ErrInvalidCredentials):
+		response.Fail(c, 401, err.Error())
+	case errors.Is(err, ErrUserNotFound):
+		response.Fail(c, 404, err.Error())
+	default:
+		response.Error(c, 500, "Terjadi kesalahan pada server")
 	}
-
-	var in input
-
-	if err := c.ShouldBindJSON(&in); err != nil {
-		response.Fail(c, 400, "Payload tidak valid")
-		return
-	}
-
-	username := strings.TrimSpace(in.Username)
-	email := strings.ToLower(strings.TrimSpace(in.Email))
-
-	if username == "" || email == "" {
-		response.Fail(c, 400, "Username dan email wajib diisi")
-		return
-	}
-
-	var u User
-
-	if err := h.DB.First(&u, id).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			response.Fail(c, 404, "Pengguna tidak ditemukan")
-			return
-		}
-
-		response.Error(c, err)
-		return
-	}
-
-	u.Username = username
-	u.Email = email
-
-	if err := h.DB.Save(&u).Error; err != nil {
-		response.Fail(c, 409, "Username atau email sudah digunakan")
-		return
-	}
-
-	u.Password = ""
-
-	response.Success(c, 200, "Profil diperbarui", u)
 }

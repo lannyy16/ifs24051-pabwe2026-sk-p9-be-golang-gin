@@ -1,11 +1,68 @@
-# Backend Delcom Blog (P9)
-Go/Gin REST API, GORM/PostgreSQL, JWT, Clean Architecture Feature-First.
+# ifs24051-pabwe2026-sk-p9-be-golang-gin
 
-1. Buat database PostgreSQL `delcom_blog`.
-2. Salin `.env.example` menjadi `.env`, sesuaikan `DATABASE_URL` dan `JWT_SECRET`.
-3. `go mod tidy`
-4. `go run ./cmd/server`
+Backend **Delcom Blog** — REST API blog multi-tier + **AI Blog Generator** terintegrasi Search Engine.
+Golang 1.27 · Gin · GORM · PostgreSQL 17 · JWT · Swagger UI. Port **8081**.
 
-API: `http://localhost:8081`; Swagger placeholder UI: `/swagger/index.html`.
-Tes: `go test -v -cover ./internal/...`.
-Registrasi membuat role `author`; ubah role akun admin melalui PostgreSQL. AI membutuhkan `OPENAI_API_KEY`. Integrasi search engine perlu provider endpoint yang sesuai dengan format JSON yang disepakati; contoh ini mengembalikan sumber kosong dan tidak mengarang sumber. `logout` stateless sehingga token dihapus oleh frontend.
+## Persiapan
+
+```bash
+psql -U postgres -c "CREATE DATABASE pabwe_p9_blog;"
+cp .env.example .env          # sesuaikan bila perlu
+go mod tidy                   # WAJIB sekali: menghasilkan go.sum & melengkapi go.mod
+```
+
+> Commit `go.mod` dan `go.sum` hasil `go mod tidy` ke repositori agar tahap
+> *Install Dependencies* (`go mod download && go mod verify`) pada Jenkins berhasil.
+
+## Menjalankan
+
+```bash
+go run cmd/server/main.go
+# Swagger UI : http://localhost:8081/swagger/index.html
+```
+
+Akun bawaan (seeder): `admin / admin` (admin) dan `member / member` (member).
+
+## Pengujian (100% statement coverage)
+
+```bash
+go test -v -cover ./internal/...
+```
+
+## Build biner
+
+```bash
+CGO_ENABLED=0 go build -ldflags="-s -w" -o server ./cmd/server
+```
+
+## Endpoint
+
+| Method | Endpoint | Akses |
+|---|---|---|
+| GET | `/swagger/*any`, `/api.json` | Publik |
+| GET | `/api/public/categories` | Publik |
+| GET | `/api/public/posts?q=&category=` | Publik |
+| GET | `/api/public/posts/:slug` | Publik |
+| POST | `/api/auth/register`, `/api/auth/login` | Publik |
+| POST | `/api/auth/logout` | Login |
+| GET/PUT | `/api/auth/profile` | Login |
+| GET/POST | `/api/posts` | Penulis |
+| GET | `/api/posts/stats` | Penulis |
+| POST | `/api/posts/ai-generate` | Penulis |
+| GET/PUT/DELETE | `/api/posts/:id` | Penulis |
+| PATCH | `/api/posts/:id/toggle-publish` | Penulis |
+| GET | `/api/admin/users`, `/api/admin/posts`, `/api/admin/users/:id/posts` | Admin |
+
+Format respons: `{ "status": "success|fail|error", "message": "...", "data": ... }`.
+
+## Kontrak Search Engine (asumsi)
+
+`GET {SEARCH_ENGINE_ENDPOINT}?q=<topik>&limit=5` dengan header `Authorization: Bearer <OPENAI_KEY>`,
+balasan `{"results":[{"title","url","snippet"}]}` atau `{"data":{"results":[...]}}`.
+Jika penelusuran gagal, artikel tetap dibuat tanpa sumber rujukan. Sesuaikan `internal/features/ai/search.go`
+bila kontrak endpoint Delcom berbeda.
+
+## CI/CD
+
+`Jenkinsfile` mengikuti pipeline: Checkout → Install → Test → Build → Trivy → Package → Publish → Deploy.
+Aturan `.gitignore` memakai awalan `/` (`/server`, `/main`, `/app`) agar `internal/server/` tidak terabaikan.

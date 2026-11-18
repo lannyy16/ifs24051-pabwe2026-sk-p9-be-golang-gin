@@ -1,9 +1,24 @@
-.env
+# Biner hasil build (diawali "/" agar folder internal/server/ TIDAK ikut terabaikan)
 /server
 /main
 /app
-*.exe
-coverage.out
+/server.exe
+
+# Environment & rahasia
+.env
+.env.*
+!.env.example
+
+# Artefak test / coverage / CI
+*.out
 *.test
+*.prof
+cov*
+coverage*
 .trivy-cache/
 trivy-results.sarif
+latest-app.zip
+
+# Editor
+.vscode/
+.idea/

@@ -1,0 +1,495 @@
+openapi: 3.0.3
+info:
+  title: Delcom Blog API
+  version: 1.0.0
+  description: REST API blog multi-tier + AI Blog Generator (Golang Gin).
+servers:
+- url: http://localhost:8081
+paths:
+  /api/public/categories:
+    get:
+      summary: Daftar kategori artikel
+      tags:
+      - Public
+      responses:
+        '200':
+          description: Respons 200
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+  /api/public/posts:
+    get:
+      summary: Daftar artikel terbit (?q=, ?category=)
+      tags:
+      - Public
+      responses:
+        '200':
+          description: Respons 200
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+      parameters:
+      - name: q
+        in: query
+        schema:
+          type: string
+      - name: category
+        in: query
+        schema:
+          type: string
+  /api/public/posts/{slug}:
+    get:
+      summary: Detail artikel terbit berdasarkan slug
+      tags:
+      - Public
+      responses:
+        '200':
+          description: Respons 200
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+        '404':
+          description: Respons 404
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+      parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+  /api/auth/register:
+    post:
+      summary: Registrasi penulis baru
+      tags:
+      - Auth
+      responses:
+        '201':
+          description: Respons 201
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+        '400':
+          description: Respons 400
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+        '409':
+          description: Respons 409
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+  /api/auth/login:
+    post:
+      summary: Login dan terbitkan token JWT
+      tags:
+      - Auth
+      responses:
+        '200':
+          description: Respons 200
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+        '401':
+          description: Respons 401
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+  /api/auth/logout:
+    post:
+      summary: Logout
+      tags:
+      - Auth
+      responses:
+        '200':
+          description: Respons 200
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+      security:
+      - BearerAuth: []
+  /api/auth/profile:
+    get:
+      summary: Profil penulis
+      tags:
+      - Auth
+      responses:
+        '200':
+          description: Respons 200
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+      security:
+      - BearerAuth: []
+    put:
+      summary: Perbarui profil
+      tags:
+      - Auth
+      responses:
+        '200':
+          description: Respons 200
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+        '400':
+          description: Respons 400
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+        '409':
+          description: Respons 409
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+      security:
+      - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+  /api/posts:
+    get:
+      summary: Artikel milik penulis
+      tags:
+      - Posts
+      responses:
+        '200':
+          description: Respons 200
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+      security:
+      - BearerAuth: []
+    post:
+      summary: Buat artikel
+      tags:
+      - Posts
+      responses:
+        '201':
+          description: Respons 201
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+        '400':
+          description: Respons 400
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+      security:
+      - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostRequest'
+  /api/posts/stats:
+    get:
+      summary: 3 kartu statistik penulis
+      tags:
+      - Posts
+      responses:
+        '200':
+          description: Respons 200
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+      security:
+      - BearerAuth: []
+  /api/posts/ai-generate:
+    post:
+      summary: Hasilkan draf artikel dengan AI + Search Engine
+      tags:
+      - AI
+      responses:
+        '200':
+          description: Respons 200
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+        '400':
+          description: Respons 400
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+        '502':
+          description: Respons 502
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+      security:
+      - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateRequest'
+  /api/posts/{id}:
+    get:
+      summary: Detail artikel milik penulis
+      tags:
+      - Posts
+      responses:
+        '200':
+          description: Respons 200
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+        '404':
+          description: Respons 404
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+      security:
+      - BearerAuth: []
+      parameters: &id001
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    put:
+      summary: Perbarui artikel
+      tags:
+      - Posts
+      responses:
+        '200':
+          description: Respons 200
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+        '400':
+          description: Respons 400
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+        '404':
+          description: Respons 404
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+      security:
+      - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostRequest'
+      parameters: *id001
+    delete:
+      summary: Hapus artikel
+      tags:
+      - Posts
+      responses:
+        '200':
+          description: Respons 200
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+        '404':
+          description: Respons 404
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+      security:
+      - BearerAuth: []
+      parameters: *id001
+  /api/posts/{id}/toggle-publish:
+    patch:
+      summary: Ubah status Draf <-> Terbit
+      tags:
+      - Posts
+      responses:
+        '200':
+          description: Respons 200
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+        '404':
+          description: Respons 404
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+      security:
+      - BearerAuth: []
+      parameters: *id001
+  /api/admin/users:
+    get:
+      summary: Seluruh pengguna + total artikel (admin)
+      tags:
+      - Admin
+      responses:
+        '200':
+          description: Respons 200
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+        '403':
+          description: Respons 403
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+      security:
+      - BearerAuth: []
+  /api/admin/posts:
+    get:
+      summary: Seluruh artikel semua penulis (admin)
+      tags:
+      - Admin
+      responses:
+        '200':
+          description: Respons 200
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+        '403':
+          description: Respons 403
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+      security:
+      - BearerAuth: []
+  /api/admin/users/{id}/posts:
+    get:
+      summary: Artikel milik pengguna tertentu (admin)
+      tags:
+      - Admin
+      responses:
+        '200':
+          description: Respons 200
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+        '404':
+          description: Respons 404
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+      security:
+      - BearerAuth: []
+      parameters: *id001
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Response:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - success
+          - fail
+          - error
+        message: &id002
+          type: string
+        data: {}
+    RegisterRequest:
+      type: object
+      properties:
+        username: *id002
+        email: *id002
+        password: *id002
+      required:
+      - username
+      - email
+      - password
+    LoginRequest:
+      type: object
+      properties:
+        username: *id002
+        password: *id002
+      required:
+      - username
+      - password
+    UpdateProfileRequest:
+      type: object
+      properties:
+        username: *id002
+        email: *id002
+        password: *id002
+    PostRequest:
+      type: object
+      properties:
+        title: *id002
+        category:
+          type: string
+          enum:
+          - Teknologi
+          - Pendidikan
+          - Gaya Hidup
+          - Bisnis
+          - Opini
+          - Umum
+        excerpt: *id002
+        content: *id002
+        cover_image_path: *id002
+        is_published: &id003
+          type: boolean
+      required:
+      - title
+      - content
+    GenerateRequest:
+      type: object
+      properties:
+        topic: *id002
+        category: *id002
+        include_web_search: *id003
+      required:
+      - topic
