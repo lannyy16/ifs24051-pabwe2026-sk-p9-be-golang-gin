@@ -1,0 +1,9 @@
+.env
+/server
+/main
+/app
+*.exe
+coverage.out
+*.test
+.trivy-cache/
+trivy-results.sarif
