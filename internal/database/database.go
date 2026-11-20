@@ -58,22 +58,32 @@ type seedUser struct {
 	role     string
 }
 
+// seedUsers: akun dari .env, akun wajib modul (admin/admin), dan member/member.
 func seedUsers(cfg *config.Config) []seedUser {
-	return []seedUser{
+	users := []seedUser{
 		{cfg.AdminUsername, cfg.AdminUsername + "@delcom.org", cfg.AdminPassword, auth.RoleAdmin},
 		{"member", "member@delcom.org", "member", auth.RoleMember},
 	}
+	if cfg.AdminUsername != "admin" {
+		users = append(users, seedUser{"admin", "admin@delcom.org", "admin", auth.RoleAdmin})
+	}
+	return users
 }
 
-// schemaReady bernilai true bila tabel dan akun bawaan sudah ada.
+// schemaReady bernilai true bila tabel ada dan setiap akun bawaan sudah ada dengan role yang benar.
 func schemaReady(db *gorm.DB, cfg *config.Config) bool {
 	m := db.Migrator()
 	if !m.HasTable(&auth.User{}) || !m.HasTable(&post.Post{}) {
 		return false
 	}
-	var count int64
-	db.Model(&auth.User{}).Where("username IN ?", []string{cfg.AdminUsername, "member"}).Count(&count)
-	return count >= 2
+	for _, s := range seedUsers(cfg) {
+		var count int64
+		db.Model(&auth.User{}).Where("username = ? AND role = ?", s.username, s.role).Count(&count)
+		if count == 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // EnsureSchema menjalankan Migrate + Seed hanya bila belum pernah dilakukan, sehingga
@@ -98,6 +108,12 @@ func Seed(db *gorm.DB, cfg *config.Config) error {
 			return err
 		}
 		if existing.ID != 0 {
+			// Pastikan role akun bawaan benar (mis. akun lama yang tercipta sebagai member).
+			if existing.Role != s.role {
+				if err := db.Model(&existing).Update("role", s.role).Error; err != nil {
+					return err
+				}
+			}
 			ids[s.username] = existing.ID
 			continue
 		}

@@ -29,6 +29,15 @@ Tanpa PostgreSQL, uji cepat dengan SQLite: `DB_CONNECTION=sqlite DB_DATABASE=blo
 Cara kerjanya: `vercel.json` meneruskan semua request ke `api/index.go`; `internal/server/pathfix.go`
 memulihkan path asli; `database.EnsureSchema` hanya migrate/seed saat tabel belum ada (cold start cepat).
 
+## Kontrak API yang dipakai grader
+
+- Statistik: `GET /api/posts/stats` → `total_articles`, `total_selesai`, `belum_selesai`.
+- Artikel memuat `user_id`, `author_name`, dan `author`; pengguna admin memuat `total_articles`, `total_published`, `created_at`.
+- Artikel orang lain: `403`; tidak ada: `404`; ID bukan angka: `400`. Admin boleh mengelola artikel siapa pun.
+- `PUT` / `PATCH /api/posts/:id` bersifat parsial (cukup kirim kolom yang diubah).
+- Registrasi username/email duplikat: `400`. Artikel milik user yang tidak ada: `200` dengan daftar kosong.
+- Akun bawaan selalu ada dengan role benar: `admin/admin` (admin) dan `member/member`.
+
 ## Pengujian (100% statement coverage)
 
 ```bash

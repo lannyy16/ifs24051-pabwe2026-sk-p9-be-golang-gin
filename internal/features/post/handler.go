@@ -20,6 +20,8 @@ func writeError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, ErrNotFound):
 		response.Fail(c, 404, err.Error())
+	case errors.Is(err, ErrForbidden):
+		response.Fail(c, 403, err.Error())
 	case errors.Is(err, ErrInvalidCategory):
 		response.Fail(c, 400, err.Error())
 	default:
@@ -90,7 +92,7 @@ func (h *Handler) Detail(c *gin.Context) {
 		return
 	}
 	u, _ := middleware.CurrentUser(c)
-	res, err := h.svc.Get(u.ID, id)
+	res, err := h.svc.Get(u.ID, u.Role, id)
 	if err != nil {
 		writeError(c, err)
 		return
@@ -120,13 +122,13 @@ func (h *Handler) Update(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var req PostRequest
+	var req UpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, "Data artikel tidak valid: "+err.Error())
 		return
 	}
 	u, _ := middleware.CurrentUser(c)
-	res, err := h.svc.Update(u.ID, id, req)
+	res, err := h.svc.Update(u.ID, u.Role, id, req)
 	if err != nil {
 		writeError(c, err)
 		return
@@ -141,7 +143,7 @@ func (h *Handler) TogglePublish(c *gin.Context) {
 		return
 	}
 	u, _ := middleware.CurrentUser(c)
-	res, err := h.svc.TogglePublish(u.ID, id)
+	res, err := h.svc.TogglePublish(u.ID, u.Role, id)
 	if err != nil {
 		writeError(c, err)
 		return
@@ -156,7 +158,7 @@ func (h *Handler) Delete(c *gin.Context) {
 		return
 	}
 	u, _ := middleware.CurrentUser(c)
-	if err := h.svc.Delete(u.ID, id); err != nil {
+	if err := h.svc.Delete(u.ID, u.Role, id); err != nil {
 		writeError(c, err)
 		return
 	}

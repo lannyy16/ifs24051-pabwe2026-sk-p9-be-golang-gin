@@ -118,6 +118,33 @@ func TestSeedCreatesAndIsIdempotent(t *testing.T) {
 	assert.Equal(t, auth.RoleMember, users[1].Role)
 }
 
+func TestSeedAddsModuleAdminAndFixesRole(t *testing.T) {
+	db := memDB(t)
+	require.NoError(t, Migrate(db))
+	// akun "admin" lama yang keliru bertipe member
+	require.NoError(t, db.Create(&auth.User{Username: "admin", Email: "admin@delcom.org", Password: "x", Role: "member"}).Error)
+
+	cfg := &config.Config{AdminUsername: "root", AdminPassword: "rootpass"}
+	assert.False(t, schemaReady(db, cfg))
+	require.NoError(t, Seed(db, cfg))
+	assert.True(t, schemaReady(db, cfg))
+
+	var admin, root auth.User
+	require.NoError(t, db.Where("username = ?", "admin").First(&admin).Error)
+	require.NoError(t, db.Where("username = ?", "root").First(&root).Error)
+	assert.Equal(t, auth.RoleAdmin, admin.Role)
+	assert.Equal(t, auth.RoleAdmin, root.Role)
+
+	// kegagalan memperbarui role
+	db2 := memDB(t)
+	require.NoError(t, Migrate(db2))
+	require.NoError(t, db2.Create(&auth.User{Username: "admin", Email: "admin@delcom.org", Password: "x", Role: "member"}).Error)
+	require.NoError(t, db2.Callback().Update().Before("gorm:update").Register("fail_update", func(tx *gorm.DB) {
+		_ = tx.AddError(errors.New("boom"))
+	}))
+	assert.Error(t, Seed(db2, &config.Config{AdminUsername: "admin", AdminPassword: "admin"}))
+}
+
 func TestSeedErrors(t *testing.T) {
 	// Kegagalan Count (DB tertutup).
 	db := memDB(t)

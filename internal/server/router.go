@@ -70,6 +70,7 @@ func NewRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 	posts.POST("/ai-generate", aiH.Generate)
 	posts.GET("/:id", postH.Detail)
 	posts.PUT("/:id", postH.Update)
+	posts.PATCH("/:id", postH.Update)
 	posts.PATCH("/:id/toggle-publish", postH.TogglePublish)
 	posts.DELETE("/:id", postH.Delete)
 

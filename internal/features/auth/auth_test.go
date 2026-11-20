@@ -88,9 +88,9 @@ func TestRegisterLoginProfileFlow(t *testing.T) {
 
 	// duplikat
 	code, _ = call(r, "POST", "/register", "", gin.H{"username": "budi", "email": "lain@mail.com", "password": "rahasia123"})
-	assert.Equal(t, 409, code)
+	assert.Equal(t, 400, code)
 	code, _ = call(r, "POST", "/register", "", gin.H{"username": "budi2", "email": "budi@mail.com", "password": "rahasia123"})
-	assert.Equal(t, 409, code)
+	assert.Equal(t, 400, code)
 	// validasi
 	code, _ = call(r, "POST", "/register", "", gin.H{"username": "b"})
 	assert.Equal(t, 400, code)
@@ -134,9 +134,9 @@ func TestUpdateProfileConflicts(t *testing.T) {
 	call(r, "POST", "/register", "", gin.H{"username": "dua", "email": "dua@x.id", "password": "123456"})
 
 	code, _ := call(r, "PUT", "/profile", token, gin.H{"username": "dua"})
-	assert.Equal(t, 409, code)
+	assert.Equal(t, 400, code)
 	code, _ = call(r, "PUT", "/profile", token, gin.H{"email": "dua@x.id"})
-	assert.Equal(t, 409, code)
+	assert.Equal(t, 400, code)
 }
 
 func TestProfileUserDeleted(t *testing.T) {
