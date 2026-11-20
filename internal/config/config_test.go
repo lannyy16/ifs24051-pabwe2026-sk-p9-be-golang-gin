@@ -7,7 +7,7 @@ import (
 )
 
 func TestLoadDefaults(t *testing.T) {
-	for _, k := range []string{"APP_ENV", "APP_PORT", "DB_HOST", "OPENAI_MODEL"} {
+	for _, k := range []string{"APP_ENV", "PORT", "APP_PORT", "DB_HOST", "OPENAI_MODEL"} {
 		t.Setenv(k, "")
 	}
 	cfg := Load()
@@ -18,7 +18,14 @@ func TestLoadDefaults(t *testing.T) {
 	assert.Equal(t, ":8081", cfg.Addr())
 }
 
+func TestPortOverridesAppPort(t *testing.T) {
+	t.Setenv("APP_PORT", "9999")
+	t.Setenv("PORT", "7777")
+	assert.Equal(t, ":7777", Load().Addr())
+}
+
 func TestLoadFromEnvironment(t *testing.T) {
+	t.Setenv("PORT", "")
 	t.Setenv("APP_PORT", "9999")
 	t.Setenv("DB_DATABASE", "mydb")
 	t.Setenv("DB_USERNAME", "u")

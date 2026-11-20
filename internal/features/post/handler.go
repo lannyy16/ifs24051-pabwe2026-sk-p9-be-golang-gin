@@ -1,4 +1,3 @@
-
 package post
 
 import (
@@ -12,21 +11,15 @@ import (
 )
 
 // Handler adalah controller endpoint artikel publik, penulis, dan admin.
-type Handler struct {
-	svc *Service
-}
+type Handler struct{ svc *Service }
 
 // NewHandler membuat Handler.
-func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc}
-}
+func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 
 func writeError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, ErrNotFound):
 		response.Fail(c, 404, err.Error())
-	case errors.Is(err, ErrForbidden):
-		response.Fail(c, 403, err.Error())
 	case errors.Is(err, ErrInvalidCategory):
 		response.Fail(c, 400, err.Error())
 	default:
@@ -36,12 +29,10 @@ func writeError(c *gin.Context, err error) {
 
 func parseID(c *gin.Context) (uint, bool) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-
 	if err != nil || id == 0 {
 		response.Fail(c, 400, "ID tidak valid")
 		return 0, false
 	}
-
 	return uint(id), true
 }
 
@@ -53,50 +44,42 @@ func (h *Handler) Categories(c *gin.Context) {
 // PublicList: GET /api/public/posts?q=&category=.
 func (h *Handler) PublicList(c *gin.Context) {
 	res, err := h.svc.ListPublic(c.Query("q"), c.Query("category"))
-
 	if err != nil {
 		writeError(c, err)
 		return
 	}
-
 	response.Success(c, 200, "Artikel berhasil diambil", res)
 }
 
 // PublicDetail: GET /api/public/posts/:slug.
 func (h *Handler) PublicDetail(c *gin.Context) {
 	res, err := h.svc.GetPublic(c.Param("slug"))
-
 	if err != nil {
 		writeError(c, err)
 		return
 	}
-
 	response.Success(c, 200, "Artikel berhasil diambil", res)
 }
 
 // List: GET /api/posts.
 func (h *Handler) List(c *gin.Context) {
 	u, _ := middleware.CurrentUser(c)
-
 	res, err := h.svc.ListMine(u.ID)
 	if err != nil {
 		writeError(c, err)
 		return
 	}
-
 	response.Success(c, 200, "Artikel berhasil diambil", res)
 }
 
 // Stats: GET /api/posts/stats.
 func (h *Handler) Stats(c *gin.Context) {
 	u, _ := middleware.CurrentUser(c)
-
 	res, err := h.svc.Stats(u.ID)
 	if err != nil {
 		writeError(c, err)
 		return
 	}
-
 	response.Success(c, 200, "Statistik berhasil diambil", res)
 }
 
@@ -106,35 +89,28 @@ func (h *Handler) Detail(c *gin.Context) {
 	if !ok {
 		return
 	}
-
 	u, _ := middleware.CurrentUser(c)
-
 	res, err := h.svc.Get(u.ID, id)
 	if err != nil {
 		writeError(c, err)
 		return
 	}
-
 	response.Success(c, 200, "Artikel berhasil diambil", res)
 }
 
 // Create: POST /api/posts.
 func (h *Handler) Create(c *gin.Context) {
 	var req PostRequest
-
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, "Data artikel tidak valid: "+err.Error())
 		return
 	}
-
 	u, _ := middleware.CurrentUser(c)
-
 	res, err := h.svc.Create(u.ID, req)
 	if err != nil {
 		writeError(c, err)
 		return
 	}
-
 	response.Success(c, 201, "Artikel berhasil dibuat", res)
 }
 
@@ -144,29 +120,17 @@ func (h *Handler) Update(c *gin.Context) {
 	if !ok {
 		return
 	}
-
-	u, _ := middleware.CurrentUser(c)
-
-	// Periksa keberadaan dan kepemilikan artikel sebelum validasi JSON.
-	_, err := h.svc.Get(u.ID, id)
-	if err != nil {
-		writeError(c, err)
-		return
-	}
-
 	var req PostRequest
-
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, "Data artikel tidak valid: "+err.Error())
 		return
 	}
-
+	u, _ := middleware.CurrentUser(c)
 	res, err := h.svc.Update(u.ID, id, req)
 	if err != nil {
 		writeError(c, err)
 		return
 	}
-
 	response.Success(c, 200, "Artikel berhasil diperbarui", res)
 }
 
@@ -176,15 +140,12 @@ func (h *Handler) TogglePublish(c *gin.Context) {
 	if !ok {
 		return
 	}
-
 	u, _ := middleware.CurrentUser(c)
-
 	res, err := h.svc.TogglePublish(u.ID, id)
 	if err != nil {
 		writeError(c, err)
 		return
 	}
-
 	response.Success(c, 200, "Status publikasi berhasil diubah", res)
 }
 
@@ -194,14 +155,11 @@ func (h *Handler) Delete(c *gin.Context) {
 	if !ok {
 		return
 	}
-
 	u, _ := middleware.CurrentUser(c)
-
 	if err := h.svc.Delete(u.ID, id); err != nil {
 		writeError(c, err)
 		return
 	}
-
 	response.Success(c, 200, "Artikel berhasil dihapus", nil)
 }
 
@@ -212,7 +170,6 @@ func (h *Handler) AdminUsers(c *gin.Context) {
 		writeError(c, err)
 		return
 	}
-
 	response.Success(c, 200, "Pengguna berhasil diambil", res)
 }
 
@@ -223,7 +180,6 @@ func (h *Handler) AdminPosts(c *gin.Context) {
 		writeError(c, err)
 		return
 	}
-
 	response.Success(c, 200, "Artikel berhasil diambil", res)
 }
 
@@ -233,12 +189,10 @@ func (h *Handler) AdminUserPosts(c *gin.Context) {
 	if !ok {
 		return
 	}
-
 	res, err := h.svc.AdminUserPosts(id)
 	if err != nil {
 		writeError(c, err)
 		return
 	}
-
 	response.Success(c, 200, "Artikel pengguna berhasil diambil", res)
 }

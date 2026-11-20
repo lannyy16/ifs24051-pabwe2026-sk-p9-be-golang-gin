@@ -1,6 +1,7 @@
 package database
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 
 	"app/internal/config"
 	"app/internal/features/auth"
+	"app/internal/features/post"
 )
 
 func memDB(t *testing.T) *gorm.DB {
@@ -41,6 +43,56 @@ func TestConnectSQLiteMemory(t *testing.T) {
 func TestOpenError(t *testing.T) {
 	_, err := Open(sqlite.Open("/nonexistent-dir/xx/yy.db"))
 	assert.Error(t, err)
+}
+
+func TestConnectChoosesDialect(t *testing.T) {
+	db, err := Connect(&config.Config{DBConnection: "sqlite", DBDatabase: ":memory:"})
+	require.NoError(t, err)
+	assert.NotNil(t, db)
+
+	_, err = Connect(&config.Config{DBConnection: "pgsql", DBHost: "127.0.0.1", DBPort: "1", DBSSLMode: "disable"})
+	assert.Error(t, err)
+}
+
+func TestEnsureSchema(t *testing.T) {
+	cfg := &config.Config{AdminUsername: "admin", AdminPassword: "admin"}
+	db := memDB(t)
+
+	require.NoError(t, EnsureSchema(db, cfg)) // migrate + seed
+	var posts int64
+	db.Model(&post.Post{}).Count(&posts)
+	assert.EqualValues(t, 2, posts)
+	assert.True(t, schemaReady(db, cfg))
+	require.NoError(t, EnsureSchema(db, cfg)) // sudah siap: tidak melakukan apa pun
+
+	// tabel ada tetapi akun bawaan belum lengkap => belum siap
+	db2 := memDB(t)
+	require.NoError(t, Migrate(db2))
+	assert.False(t, schemaReady(db2, cfg))
+
+	// migrasi gagal
+	db3 := memDB(t)
+	closeDB(t, db3)
+	assert.Error(t, EnsureSchema(db3, cfg))
+}
+
+func TestSeedPostErrors(t *testing.T) {
+	cfg := &config.Config{AdminUsername: "admin", AdminPassword: "admin"}
+
+	// tabel posts tidak ada => Count gagal
+	db := memDB(t)
+	require.NoError(t, db.AutoMigrate(&auth.User{}))
+	assert.Error(t, Seed(db, cfg))
+
+	// pembuatan artikel gagal
+	db = memDB(t)
+	require.NoError(t, Migrate(db))
+	require.NoError(t, db.Callback().Create().Before("gorm:create").Register("fail_posts", func(tx *gorm.DB) {
+		if tx.Statement.Table == "posts" {
+			_ = tx.AddError(errors.New("boom"))
+		}
+	}))
+	assert.ErrorContains(t, Seed(db, cfg), "seed artikel")
 }
 
 func TestMigrateError(t *testing.T) {

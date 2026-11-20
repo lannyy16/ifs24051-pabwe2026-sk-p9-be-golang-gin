@@ -35,7 +35,7 @@ func Load() *Config {
 	_ = godotenv.Load()
 	return &Config{
 		AppEnv:        get("APP_ENV", "development"),
-		AppPort:       get("APP_PORT", "8081"),
+		AppPort:       get("PORT", get("APP_PORT", "8081")),
 		AppKey:        get("APP_KEY", "delcom_blog_secret_key_super_secure_2026_random_string_32chars"),
 		AdminUsername: get("ADMIN_USERNAME", "admin"),
 		AdminPassword: get("ADMIN_PASSWORD", "admin"),

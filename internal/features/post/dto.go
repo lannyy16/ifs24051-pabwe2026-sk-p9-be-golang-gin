@@ -8,14 +8,7 @@ import (
 )
 
 // Categories adalah daftar kategori artikel yang valid.
-var Categories = []string{
-	"Teknologi",
-	"Pendidikan",
-	"Gaya Hidup",
-	"Bisnis",
-	"Opini",
-	"Umum",
-}
+var Categories = []string{"Teknologi", "Pendidikan", "Gaya Hidup", "Bisnis", "Opini", "Umum"}
 
 // DefaultCategory dipakai bila kategori kosong.
 const DefaultCategory = "Umum"
@@ -23,7 +16,6 @@ const DefaultCategory = "Umum"
 // Error domain artikel.
 var (
 	ErrNotFound        = errors.New("artikel tidak ditemukan")
-	ErrForbidden       = errors.New("akses artikel ditolak")
 	ErrInvalidCategory = errors.New("kategori tidak valid")
 )
 
@@ -60,10 +52,9 @@ type AuthorInfo struct {
 	Username string `json:"username"`
 }
 
-// PostResponse adalah representasi artikel untuk penulis dan admin.
+// PostResponse adalah representasi artikel pada API.
 type PostResponse struct {
 	ID             uint       `json:"id"`
-	UserID         uint       `json:"user_id"`
 	Title          string     `json:"title"`
 	Slug           string     `json:"slug"`
 	Category       string     `json:"category"`
@@ -78,28 +69,11 @@ type PostResponse struct {
 	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
-// PublicPostResponse adalah representasi artikel untuk pengunjung publik.
-// Tidak menyertakan user_id atau data internal lainnya.
-type PublicPostResponse struct {
-	ID             uint       `json:"id"`
-	Title          string     `json:"title"`
-	Slug           string     `json:"slug"`
-	Category       string     `json:"category"`
-	Excerpt        string     `json:"excerpt"`
-	CoverImagePath string     `json:"cover_image_path"`
-	PublishedAt    *time.Time `json:"published_at"`
-	ReadingTime    int        `json:"reading_time"`
-	AuthorName     string     `json:"author_name"`
-}
-
-// StatsResponse adalah ringkasan statistik artikel penulis.
+// StatsResponse adalah ringkasan 3 kartu statistik penulis.
 type StatsResponse struct {
-	Total         int64 `json:"total"`
-	Published     int64 `json:"published"`
-	Draft         int64 `json:"draft"`
-	TotalArticles int64 `json:"total_articles"`
-	TotalSelesai  int64 `json:"total_selesai"`
-	BelumSelesai  int64 `json:"belum_selesai"`
+	Total     int64 `json:"total"`
+	Published int64 `json:"published"`
+	Draft     int64 `json:"draft"`
 }
 
 // AdminUser adalah baris monitoring pengguna beserta jumlah artikelnya.

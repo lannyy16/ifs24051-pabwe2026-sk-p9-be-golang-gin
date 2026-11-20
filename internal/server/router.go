@@ -27,10 +27,13 @@ func NewRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 	authH := auth.NewHandler(auth.NewService(auth.NewRepository(db), cfg.AppKey))
 	postH := post.NewHandler(post.NewService(post.NewRepository(db)))
 	aiH := ai.NewHandler(ai.NewService(
-		ai.NewSearchClient(cfg.SearchEngineEndpoint, cfg.OpenAIKey),
+		ai.NewSearchClient(cfg.SearchEngineEndpoint, ""),
 		ai.NewChatClient(cfg.OpenAIEndpoint, cfg.OpenAIKey, cfg.OpenAIModel),
 	))
 
+	r.GET("/", func(c *gin.Context) {
+		response.Success(c, http.StatusOK, "Delcom Blog API berjalan", gin.H{"name": "Delcom Blog API", "version": "1.0.0"})
+	})
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, ginSwagger.URL("/api.json")))
 	r.GET("/api.json", func(c *gin.Context) {
 		scheme := "http"

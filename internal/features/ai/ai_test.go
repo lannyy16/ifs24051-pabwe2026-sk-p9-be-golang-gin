@@ -71,9 +71,18 @@ func TestGenerateErrors(t *testing.T) {
 	_, err := NewService(nil, &fakeChat{err: errBoom}).Generate(context.Background(), GenerateRequest{Topic: "abc"})
 	assert.ErrorIs(t, err, ErrUpstream)
 
-	for _, out := range []string{"bukan json", `{"title":"","content":"x"}`, `{"title":"x","content":" "}`} {
-		_, err = NewService(nil, &fakeChat{out: out}).Generate(context.Background(), GenerateRequest{Topic: "abc"})
-		assert.ErrorIs(t, err, ErrInvalidAIResponse, out)
+	_, err = NewService(nil, &fakeChat{out: "   "}).Generate(context.Background(), GenerateRequest{Topic: "abc"})
+	assert.ErrorIs(t, err, ErrInvalidAIResponse)
+}
+
+func TestGenerateFallsBackToPlainMarkdown(t *testing.T) {
+	for _, out := range []string{"## Halo\n\nIsi markdown biasa", `{"title":"","content":"x"}`, `{"title":"x","content":" "}`} {
+		res, err := NewService(nil, &fakeChat{out: out}).Generate(context.Background(), GenerateRequest{Topic: " Golang ", Category: "Bisnis"})
+		assert.NoError(t, err, out)
+		assert.Equal(t, "Golang", res.Title)
+		assert.Equal(t, "Artikel ulasan tentang Golang.", res.Excerpt)
+		assert.Equal(t, out, res.Content)
+		assert.Equal(t, "Bisnis", res.Category)
 	}
 }
 
@@ -91,6 +100,8 @@ func TestChatClient(t *testing.T) {
 		switch req.Model {
 		case "empty":
 			_, _ = w.Write([]byte(`{"choices":[]}`))
+		case "apierror":
+			_, _ = w.Write([]byte(`{"error":{"message":"kuota habis"}}`))
 		case "fail":
 			w.WriteHeader(500)
 		case "badjson":
@@ -111,12 +122,21 @@ func TestChatClient(t *testing.T) {
 	c.Model = "empty"
 	_, err = c.Complete(context.Background(), nil)
 	assert.ErrorIs(t, err, ErrEmptyCompletion)
+	c.Model = "apierror"
+	_, err = c.Complete(context.Background(), nil)
+	assert.ErrorContains(t, err, "kuota habis")
 	c.Model = "fail"
 	_, err = c.Complete(context.Background(), nil)
 	assert.Error(t, err)
 	c.Model = "badjson"
 	_, err = c.Complete(context.Background(), nil)
 	assert.Error(t, err)
+
+	// endpoint yang sudah berakhiran /chat/completions tidak digandakan
+	c = NewChatClient(srv.URL+"/chat/completions", "kunci", "ok")
+	_, err = c.Complete(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, "/chat/completions", gotPath)
 
 	// tanpa kunci => tanpa header Authorization
 	c = NewChatClient(srv.URL, "", "ok")
@@ -146,6 +166,16 @@ func TestSearchClient(t *testing.T) {
 				items[i] = `{"title":"t","url":"u","snippet":"s"}`
 			}
 			_, _ = w.Write([]byte(`{"results":[` + strings.Join(items, ",") + `]}`))
+		case "list":
+			_, _ = w.Write([]byte(`[{"title":"L","url":"u","snippet":"s"}]`))
+		case "datalist":
+			_, _ = w.Write([]byte(`{"data":[{"title":"D","url":"u","snippet":"s"}]}`))
+		case "badjson":
+			_, _ = w.Write([]byte(`{"data":"bukan daftar"}`))
+		case "empty":
+			_, _ = w.Write([]byte(`{}`))
+		case "notobject":
+			_, _ = w.Write([]byte(`"teks"`))
 		case "fail":
 			w.WriteHeader(503)
 		}
@@ -166,6 +196,17 @@ func TestSearchClient(t *testing.T) {
 	got, err = s.Search(context.Background(), "many")
 	require.NoError(t, err)
 	assert.Len(t, got, maxSources)
+
+	for _, q := range []string{"list", "datalist"} {
+		got, err = s.Search(context.Background(), q)
+		require.NoError(t, err)
+		assert.Len(t, got, 1, q)
+	}
+	for _, q := range []string{"badjson", "empty", "notobject"} {
+		got, err = s.Search(context.Background(), q)
+		require.NoError(t, err)
+		assert.Empty(t, got, q)
+	}
 
 	_, err = s.Search(context.Background(), "fail")
 	assert.Error(t, err)
