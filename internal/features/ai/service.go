@@ -57,36 +57,19 @@ func (s *Service) Generate(ctx context.Context, req GenerateRequest) (*GenerateR
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrUpstream, err)
 	}
-	if strings.TrimSpace(raw) == "" {
+	var art article
+	if err := json.Unmarshal([]byte(extractJSON(raw)), &art); err != nil ||
+		strings.TrimSpace(art.Title) == "" || strings.TrimSpace(art.Content) == "" {
 		return nil, ErrInvalidAIResponse
 	}
-	art := parseArticle(raw, req)
 	return &GenerateResponse{
-		Title:         art.Title,
+		Title:         strings.TrimSpace(art.Title),
 		Category:      post.ResolveCategory(req.Category, art.Category),
-		Excerpt:       art.Excerpt,
+		Excerpt:       strings.TrimSpace(art.Excerpt),
 		Content:       art.Content,
 		Sources:       sources,
 		UsedWebSearch: len(sources) > 0,
 	}, nil
-}
-
-// parseArticle mengurai JSON dari model; bila model membalas teks Markdown biasa,
-// seluruh balasan dipakai sebagai isi artikel dengan judul dari topik.
-func parseArticle(raw string, req GenerateRequest) article {
-	var art article
-	if err := json.Unmarshal([]byte(extractJSON(raw)), &art); err != nil ||
-		strings.TrimSpace(art.Title) == "" || strings.TrimSpace(art.Content) == "" {
-		topic := strings.TrimSpace(req.Topic)
-		return article{
-			Title:   topic,
-			Excerpt: fmt.Sprintf("Artikel ulasan tentang %s.", topic),
-			Content: raw,
-		}
-	}
-	art.Title = strings.TrimSpace(art.Title)
-	art.Excerpt = strings.TrimSpace(art.Excerpt)
-	return art
 }
 
 // extractJSON mengambil objek JSON terluar (menyingkirkan pagar ```json dan teks pembuka).

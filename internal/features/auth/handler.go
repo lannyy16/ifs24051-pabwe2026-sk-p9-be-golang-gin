@@ -80,7 +80,7 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 func writeError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, ErrUsernameTaken), errors.Is(err, ErrEmailTaken):
-		response.Fail(c, 400, err.Error())
+		response.Fail(c, 409, err.Error())
 	case errors.Is(err, ErrInvalidCredentials):
 		response.Fail(c, 401, err.Error())
 	case errors.Is(err, ErrUserNotFound):

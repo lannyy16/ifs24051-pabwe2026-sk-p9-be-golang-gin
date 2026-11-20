@@ -62,9 +62,6 @@ type chatResponse struct {
 	Choices []struct {
 		Message Message `json:"message"`
 	} `json:"choices"`
-	Error *struct {
-		Message string `json:"message"`
-	} `json:"error"`
 }
 
 // Complete mengirim pesan ke {endpoint}/chat/completions dan mengembalikan teks jawaban.
@@ -72,15 +69,9 @@ func (c *ChatClient) Complete(ctx context.Context, messages []Message) (string, 
 	// Struct berisi string/angka saja, sehingga Marshal tidak mungkin gagal.
 	payload, _ := json.Marshal(chatRequest{Model: c.Model, Messages: messages, Temperature: 0.7})
 	var out chatResponse
-	target := strings.TrimRight(c.Endpoint, "/")
-	if !strings.HasSuffix(target, "/chat/completions") {
-		target += "/chat/completions"
-	}
+	target := strings.TrimRight(c.Endpoint, "/") + "/chat/completions"
 	if err := doJSON(ctx, c.HTTP, http.MethodPost, target, c.Key, payload, &out); err != nil {
 		return "", err
-	}
-	if out.Error != nil {
-		return "", fmt.Errorf("kesalahan OpenAI API: %s", out.Error.Message)
 	}
 	if len(out.Choices) == 0 {
 		return "", ErrEmptyCompletion

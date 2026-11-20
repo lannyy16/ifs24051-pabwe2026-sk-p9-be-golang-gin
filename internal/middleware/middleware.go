@@ -86,7 +86,7 @@ func RequireRole(roles ...string) gin.HandlerFunc {
 			return
 		}
 		for _, r := range roles {
-			if strings.EqualFold(u.Role, r) {
+			if u.Role == r {
 				c.Next()
 				return
 			}

@@ -86,12 +86,11 @@ func makeExcerpt(content string) string {
 // ToResponse mengubah Post menjadi PostResponse.
 func ToResponse(p *Post) PostResponse {
 	return PostResponse{
-		ID: p.ID, UserID: p.UserID, Title: p.Title, Slug: p.Slug, Category: p.Category, Excerpt: p.Excerpt,
+		ID: p.ID, Title: p.Title, Slug: p.Slug, Category: p.Category, Excerpt: p.Excerpt,
 		Content: p.Content, CoverImagePath: p.CoverImagePath, IsPublished: p.IsPublished,
 		PublishedAt: p.PublishedAt, ReadingTime: ReadingTime(p.Content),
-		Author:     AuthorInfo{ID: p.User.ID, Username: p.User.Username},
-		AuthorName: p.User.Username,
-		CreatedAt:  p.CreatedAt, UpdatedAt: p.UpdatedAt,
+		Author:    AuthorInfo{ID: p.User.ID, Username: p.User.Username},
+		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
 	}
 }
 
@@ -118,20 +117,12 @@ func (s *Service) uniqueSlug(title string, excludeID uint) (string, error) {
 	}
 }
 
-// owned mengambil artikel dan memastikan pemanggil adalah pemilik (atau admin).
-// Tidak ada => ErrNotFound; milik orang lain => ErrForbidden.
-func (s *Service) owned(userID uint, role string, id uint) (*Post, error) {
-	p, err := s.repo.FindByID(id)
+func (s *Service) mine(userID, id uint) (*Post, error) {
+	p, err := s.repo.FindByIDAndUser(id, userID)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrNotFound
 	}
-	if err != nil {
-		return nil, err
-	}
-	if p.UserID != userID && !strings.EqualFold(role, "admin") {
-		return nil, ErrForbidden
-	}
-	return p, nil
+	return p, err
 }
 
 // ListPublic mengembalikan artikel terbit dengan pencarian & filter kategori.
@@ -166,8 +157,8 @@ func (s *Service) ListMine(userID uint) ([]PostResponse, error) {
 }
 
 // Get mengembalikan satu artikel milik penulis.
-func (s *Service) Get(userID uint, role string, id uint) (*PostResponse, error) {
-	p, err := s.owned(userID, role, id)
+func (s *Service) Get(userID, id uint) (*PostResponse, error) {
+	p, err := s.mine(userID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -200,74 +191,55 @@ func (s *Service) Create(userID uint, req PostRequest) (*PostResponse, error) {
 	if err := s.repo.Create(p); err != nil {
 		return nil, err
 	}
-	return s.Get(userID, "", p.ID)
+	return s.Get(userID, p.ID)
 }
 
-// Update memperbarui artikel secara parsial (kolom yang tidak dikirim tidak berubah).
-func (s *Service) Update(userID uint, role string, id uint, req UpdateRequest) (*PostResponse, error) {
-	p, err := s.owned(userID, role, id)
+// Update memperbarui artikel milik penulis.
+func (s *Service) Update(userID, id uint, req PostRequest) (*PostResponse, error) {
+	p, err := s.mine(userID, id)
 	if err != nil {
 		return nil, err
 	}
-	if req.Category != nil {
-		category, err := NormalizeCategory(*req.Category)
+	category, err := NormalizeCategory(req.Category)
+	if err != nil {
+		return nil, err
+	}
+	title := strings.TrimSpace(req.Title)
+	if title != p.Title {
+		slug, err := s.uniqueSlug(title, p.ID)
 		if err != nil {
 			return nil, err
 		}
-		p.Category = category
+		p.Slug = slug
 	}
-	if req.Title != nil && strings.TrimSpace(*req.Title) != "" {
-		title := strings.TrimSpace(*req.Title)
-		if title != p.Title {
-			slug, err := s.uniqueSlug(title, p.ID)
-			if err != nil {
-				return nil, err
-			}
-			p.Slug = slug
-		}
-		p.Title = title
-	}
-	if req.Content != nil && strings.TrimSpace(*req.Content) != "" {
-		p.Content = *req.Content
-	}
-	if req.Excerpt != nil {
-		p.Excerpt = strings.TrimSpace(*req.Excerpt)
-	}
+	p.Title = title
+	p.Category = category
+	p.Excerpt = strings.TrimSpace(req.Excerpt)
 	if p.Excerpt == "" {
-		p.Excerpt = makeExcerpt(p.Content)
+		p.Excerpt = makeExcerpt(req.Content)
 	}
-	if req.CoverImagePath != nil {
-		p.CoverImagePath = strings.TrimSpace(*req.CoverImagePath)
-	}
-	if req.IsPublished != nil {
-		setPublished(p, *req.IsPublished)
-	}
+	p.Content = req.Content
+	p.CoverImagePath = strings.TrimSpace(req.CoverImagePath)
 	if err := s.repo.Update(p); err != nil {
 		return nil, err
 	}
 	res := ToResponse(p)
 	return &res, nil
-}
-
-// setPublished mengatur status terbit beserta published_at.
-func setPublished(p *Post, published bool) {
-	if published && (!p.IsPublished || p.PublishedAt == nil) {
-		now := time.Now()
-		p.PublishedAt = &now
-	}
-	if !published {
-		p.PublishedAt = nil
-	}
-	p.IsPublished = published
 }
 
 // TogglePublish membalik status Draf <-> Terbit beserta published_at.
-func (s *Service) TogglePublish(userID uint, role string, id uint) (*PostResponse, error) {
-	p, err := s.owned(userID, role, id)
+func (s *Service) TogglePublish(userID, id uint) (*PostResponse, error) {
+	p, err := s.mine(userID, id)
 	if err != nil {
 		return nil, err
 	}
-	setPublished(p, !p.IsPublished)
+	p.IsPublished = !p.IsPublished
+	if p.IsPublished {
+		now := time.Now()
+		p.PublishedAt = &now
+	} else {
+		p.PublishedAt = nil
+	}
 	if err := s.repo.Update(p); err != nil {
 		return nil, err
 	}
@@ -275,9 +247,9 @@ func (s *Service) TogglePublish(userID uint, role string, id uint) (*PostRespons
 	return &res, nil
 }
 
-// Delete menghapus artikel milik penulis (atau oleh admin).
-func (s *Service) Delete(userID uint, role string, id uint) error {
-	p, err := s.owned(userID, role, id)
+// Delete menghapus artikel milik penulis.
+func (s *Service) Delete(userID, id uint) error {
+	p, err := s.mine(userID, id)
 	if err != nil {
 		return err
 	}
@@ -290,7 +262,7 @@ func (s *Service) Stats(userID uint) (*StatsResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &StatsResponse{TotalArticles: total, TotalSelesai: published, BelumSelesai: total - published}, nil
+	return &StatsResponse{Total: total, Published: published, Draft: total - published}, nil
 }
 
 // AdminUsers mengembalikan seluruh pengguna beserta jumlah artikelnya.
@@ -314,7 +286,14 @@ func (s *Service) AdminPosts() ([]PostResponse, error) {
 	return toResponses(posts), nil
 }
 
-// AdminUserPosts mengembalikan seluruh artikel milik pengguna tertentu (kosong bila tidak ada).
+// AdminUserPosts mengembalikan seluruh artikel milik pengguna tertentu.
 func (s *Service) AdminUserPosts(userID uint) ([]PostResponse, error) {
+	exists, err := s.repo.UserExists(userID)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, ErrNotFound
+	}
 	return s.ListMine(userID)
 }

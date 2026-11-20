@@ -2,7 +2,6 @@ package ai
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
@@ -30,33 +29,12 @@ type searchItem struct {
 	Content string `json:"content"`
 }
 
-// Bentuk balasan yang didukung: [...], {"data":[...]}, {"results":[...]}, atau {"data":{"results":[...]}}.
+// Kontrak yang diasumsikan: {"results":[...]} atau {"data":{"results":[...]}}.
 type searchResponse struct {
-	Results []searchItem    `json:"results"`
-	Data    json.RawMessage `json:"data"`
-}
-
-// extractItems mengurai balasan Search Engine ke daftar item, apa pun bentuknya.
-func extractItems(body json.RawMessage) []searchItem {
-	var list []searchItem
-	if json.Unmarshal(body, &list) == nil && len(list) > 0 {
-		return list
-	}
-	var wrapped searchResponse
-	if json.Unmarshal(body, &wrapped) != nil {
-		return nil
-	}
-	if len(wrapped.Results) > 0 {
-		return wrapped.Results
-	}
-	var nested searchResponse
-	if json.Unmarshal(wrapped.Data, &list) == nil && len(list) > 0 {
-		return list
-	}
-	if json.Unmarshal(wrapped.Data, &nested) == nil {
-		return nested.Results
-	}
-	return nil
+	Results []searchItem `json:"results"`
+	Data    struct {
+		Results []searchItem `json:"results"`
+	} `json:"data"`
 }
 
 // Search menjalankan GET {endpoint}?q=<query>&limit=5 dan memetakan hasilnya ke Source.
@@ -67,11 +45,14 @@ func (s *SearchClient) Search(ctx context.Context, query string) ([]Source, erro
 	}
 	target := s.Endpoint + sep + url.Values{"q": {query}, "limit": {"5"}}.Encode()
 
-	var raw json.RawMessage
-	if err := doJSON(ctx, s.HTTP, http.MethodGet, target, s.Key, nil, &raw); err != nil {
+	var out searchResponse
+	if err := doJSON(ctx, s.HTTP, http.MethodGet, target, s.Key, nil, &out); err != nil {
 		return nil, err
 	}
-	items := extractItems(raw)
+	items := out.Results
+	if len(items) == 0 {
+		items = out.Data.Results
+	}
 	sources := make([]Source, 0, maxSources)
 	for _, it := range items {
 		if len(sources) == maxSources {

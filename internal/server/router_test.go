@@ -55,13 +55,6 @@ func login(t *testing.T, r *gin.Engine, user, pass string) string {
 	return out["data"].(map[string]any)["token"].(string)
 }
 
-func TestHealthRoot(t *testing.T) {
-	r := setup(t)
-	code, out, _ := call(r, "GET", "/", "", nil)
-	assert.Equal(t, 200, code)
-	assert.Equal(t, "Delcom Blog API berjalan", out["message"])
-}
-
 func TestNotFoundAndSwagger(t *testing.T) {
 	r := setup(t)
 	code, out, _ := call(r, "GET", "/tidak/ada", "", nil)

@@ -31,7 +31,7 @@ func (r *gormRepository) FindByID(id uint) (*User, error) {
 
 func (r *gormRepository) FindByIdentity(identity string) (*User, error) {
 	var u User
-	if err := r.db.Where("username = ? OR email = ?", identity, identity).First(&u).Error; err != nil {
+	if err := r.db.Where("LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)", identity, identity).First(&u).Error; err != nil {
 		return nil, err
 	}
 	return &u, nil

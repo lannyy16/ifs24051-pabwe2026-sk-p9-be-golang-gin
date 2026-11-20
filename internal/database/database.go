@@ -2,9 +2,6 @@
 package database
 
 import (
-	"fmt"
-	"time"
-
 	"github.com/glebarez/sqlite"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
@@ -21,18 +18,9 @@ func Open(d gorm.Dialector) (*gorm.DB, error) {
 	return gorm.Open(d, &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 }
 
-// Connect memilih SQLite (DB_CONNECTION=sqlite) atau PostgreSQL (default).
-func Connect(cfg *config.Config) (*gorm.DB, error) {
-	if cfg.DBConnection == "sqlite" {
-		return Open(sqlite.Open(cfg.DBDatabase))
-	}
-	return ConnectPostgres(cfg)
-}
-
-// ConnectPostgres menghubungkan aplikasi ke PostgreSQL. PreferSimpleProtocol membuatnya
-// kompatibel dengan connection pooler (Supabase/Neon/PgBouncer) pada lingkungan serverless.
+// ConnectPostgres menghubungkan aplikasi ke PostgreSQL (runtime).
 func ConnectPostgres(cfg *config.Config) (*gorm.DB, error) {
-	return Open(postgres.New(postgres.Config{DSN: cfg.DSN(), PreferSimpleProtocol: true}))
+	return Open(postgres.Open(cfg.DSN()))
 }
 
 // ConnectSQLiteMemory membuka SQLite in-memory (dipakai unit test mandiri).
@@ -58,63 +46,18 @@ type seedUser struct {
 	role     string
 }
 
-// seedUsers: akun dari .env, akun wajib modul (admin/admin), dan member/member.
-func seedUsers(cfg *config.Config) []seedUser {
-	users := []seedUser{
+// Seed menyuntikkan akun admin (dari .env) dan member bawaan bila belum ada.
+func Seed(db *gorm.DB, cfg *config.Config) error {
+	seeds := []seedUser{
 		{cfg.AdminUsername, cfg.AdminUsername + "@delcom.org", cfg.AdminPassword, auth.RoleAdmin},
 		{"member", "member@delcom.org", "member", auth.RoleMember},
 	}
-	if cfg.AdminUsername != "admin" {
-		users = append(users, seedUser{"admin", "admin@delcom.org", "admin", auth.RoleAdmin})
-	}
-	return users
-}
-
-// schemaReady bernilai true bila tabel ada dan setiap akun bawaan sudah ada dengan role yang benar.
-func schemaReady(db *gorm.DB, cfg *config.Config) bool {
-	m := db.Migrator()
-	if !m.HasTable(&auth.User{}) || !m.HasTable(&post.Post{}) {
-		return false
-	}
-	for _, s := range seedUsers(cfg) {
+	for _, s := range seeds {
 		var count int64
-		db.Model(&auth.User{}).Where("username = ? AND role = ?", s.username, s.role).Count(&count)
-		if count == 0 {
-			return false
-		}
-	}
-	return true
-}
-
-// EnsureSchema menjalankan Migrate + Seed hanya bila belum pernah dilakukan, sehingga
-// cold start serverless cepat dan beberapa instance paralel tidak saling bentrok.
-func EnsureSchema(db *gorm.DB, cfg *config.Config) error {
-	if schemaReady(db, cfg) {
-		return nil
-	}
-	if err := Migrate(db); err != nil {
-		return err
-	}
-	return Seed(db, cfg)
-}
-
-// Seed menyuntikkan akun admin (dari .env), member, dan dua artikel contoh bila belum ada.
-func Seed(db *gorm.DB, cfg *config.Config) error {
-	ids := map[string]uint{}
-	for _, s := range seedUsers(cfg) {
-		var existing auth.User
-		err := db.Where("username = ?", s.username).Limit(1).Find(&existing).Error
-		if err != nil {
+		if err := db.Model(&auth.User{}).Where("username = ?", s.username).Count(&count).Error; err != nil {
 			return err
 		}
-		if existing.ID != 0 {
-			// Pastikan role akun bawaan benar (mis. akun lama yang tercipta sebagai member).
-			if existing.Role != s.role {
-				if err := db.Model(&existing).Update("role", s.role).Error; err != nil {
-					return err
-				}
-			}
-			ids[s.username] = existing.ID
+		if count > 0 {
 			continue
 		}
 		hash, err := bcrypt.GenerateFromPassword([]byte(s.password), bcrypt.DefaultCost)
@@ -124,40 +67,6 @@ func Seed(db *gorm.DB, cfg *config.Config) error {
 		user := auth.User{Username: s.username, Email: s.email, Password: string(hash), Role: s.role}
 		if err := db.Create(&user).Error; err != nil {
 			return err
-		}
-		ids[s.username] = user.ID
-	}
-	return seedPosts(db, cfg, ids)
-}
-
-func seedPosts(db *gorm.DB, cfg *config.Config, ids map[string]uint) error {
-	var count int64
-	if err := db.Model(&post.Post{}).Count(&count).Error; err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil
-	}
-	now := time.Now()
-	samples := []post.Post{
-		{
-			UserID: ids["member"], Title: "Pengenalan Bahasa Pemrograman Golang Modern",
-			Slug: "pengenalan-bahasa-pemrograman-golang-modern", Category: "Teknologi",
-			Excerpt:     "Panduan memahami Golang dan Gin untuk membangun REST API yang cepat dan rapi.",
-			Content:     "# Belajar Golang\n\nGolang adalah bahasa pemrograman open source buatan Google yang dirancang untuk performa tinggi, efisiensi memori, dan konkurensi yang mudah lewat goroutine.\n\n## Mengapa Gin?\n\nGin adalah web framework ringan dengan router cepat, middleware, dan binding JSON yang praktis.\n\n## Penutup\n\nMulailah dari proyek kecil, tulis pengujian sejak awal, dan biarkan arsitektur tumbuh secara bertahap.",
-			IsPublished: true, PublishedAt: &now,
-		},
-		{
-			UserID: ids[cfg.AdminUsername], Title: "Penerapan AI dalam Kurikulum Pendidikan 2026",
-			Slug: "penerapan-ai-dalam-kurikulum-pendidikan-2026", Category: "Pendidikan",
-			Excerpt:     "Bagaimana kecerdasan buatan mengubah cara belajar dan mengajar di perguruan tinggi.",
-			Content:     "# Pendidikan Modern Berbasis AI\n\nKecerdasan buatan membantu proses belajar mengajar menjadi lebih interaktif dan adaptif.\n\n## Peluang\n\n- Umpan balik instan untuk mahasiswa\n- Materi yang menyesuaikan kecepatan belajar\n- Asisten penulisan dan penelitian\n\n## Tantangan\n\nIntegritas akademik dan literasi digital tetap menjadi fondasi yang harus dijaga.",
-			IsPublished: true, PublishedAt: &now,
-		},
-	}
-	for i := range samples {
-		if err := db.Create(&samples[i]).Error; err != nil {
-			return fmt.Errorf("seed artikel: %w", err)
 		}
 	}
 	return nil

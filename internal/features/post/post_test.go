@@ -66,7 +66,6 @@ func router(h *Handler) *gin.Engine {
 	g.GET("/stats", h.Stats)
 	g.GET("/:id", h.Detail)
 	g.PUT("/:id", h.Update)
-	g.PATCH("/:id", h.Update)
 	g.PATCH("/:id/toggle-publish", h.TogglePublish)
 	g.DELETE("/:id", h.Delete)
 	a := r.Group("/admin", middleware.Auth(secret), middleware.RequireRole(auth.RoleAdmin))
@@ -140,8 +139,6 @@ func TestAuthorFlowAndPublicEndpoints(t *testing.T) {
 	first := dataMap(out)
 	assert.Equal(t, "belajar-golang-gin", first["slug"])
 	assert.Equal(t, "penulis", first["author"].(map[string]any)["username"])
-	assert.Equal(t, "penulis", first["author_name"])
-	assert.NotZero(t, first["user_id"])
 	assert.NotNil(t, first["published_at"])
 	assert.NotEmpty(t, first["excerpt"])
 
@@ -165,12 +162,12 @@ func TestAuthorFlowAndPublicEndpoints(t *testing.T) {
 	assert.Len(t, dataList(out), 2)
 	code, out = call(r, "GET", "/posts/stats", tok, nil)
 	assert.Equal(t, 200, code)
-	assert.EqualValues(t, 2, dataMap(out)["total_articles"])
-	assert.EqualValues(t, 1, dataMap(out)["total_selesai"])
-	assert.EqualValues(t, 1, dataMap(out)["belum_selesai"])
+	assert.EqualValues(t, 2, dataMap(out)["total"])
+	assert.EqualValues(t, 1, dataMap(out)["published"])
+	assert.EqualValues(t, 1, dataMap(out)["draft"])
 	code, out = call(r, "GET", "/posts/stats", other, nil)
 	assert.Equal(t, 200, code)
-	assert.EqualValues(t, 0, dataMap(out)["total_articles"])
+	assert.EqualValues(t, 0, dataMap(out)["total"])
 
 	// detail
 	firstPath := fmt.Sprintf("/posts/%v", first["id"])
@@ -178,7 +175,7 @@ func TestAuthorFlowAndPublicEndpoints(t *testing.T) {
 	code, _ = call(r, "GET", firstPath, tok, nil)
 	assert.Equal(t, 200, code)
 	code, _ = call(r, "GET", firstPath, other, nil)
-	assert.Equal(t, 403, code)
+	assert.Equal(t, 404, code)
 	code, _ = call(r, "GET", "/posts/999", tok, nil)
 	assert.Equal(t, 404, code)
 	code, _ = call(r, "GET", "/posts/abc", tok, nil)
@@ -186,40 +183,23 @@ func TestAuthorFlowAndPublicEndpoints(t *testing.T) {
 	code, _ = call(r, "GET", "/posts/0", tok, nil)
 	assert.Equal(t, 400, code)
 
-	// update parsial: judul berubah => slug baru
+	// update: judul berubah => slug baru
 	code, out = call(r, "PUT", firstPath, tok, gin.H{"title": "Judul Baru", "content": "konten baru", "category": "Bisnis", "excerpt": "ringkas"})
 	assert.Equal(t, 200, code)
 	assert.Equal(t, "judul-baru", dataMap(out)["slug"])
 	assert.Equal(t, "ringkas", dataMap(out)["excerpt"])
-	// hanya judul (kolom lain tidak berubah) via PATCH, judul sama => slug tetap
-	code, out = call(r, "PATCH", firstPath, tok, gin.H{"title": "Judul Baru"})
+	// judul sama => slug tetap
+	code, out = call(r, "PUT", firstPath, tok, gin.H{"title": "Judul Baru", "content": "konten lagi", "category": "Bisnis"})
 	assert.Equal(t, 200, code)
 	assert.Equal(t, "judul-baru", dataMap(out)["slug"])
-	assert.Equal(t, "Bisnis", dataMap(out)["category"])
-	// kosongkan excerpt => dibuat ulang dari konten; ubah sampul; tidak mengubah status
-	code, out = call(r, "PUT", firstPath, tok, gin.H{"excerpt": "", "cover_image_path": " http://c "})
-	assert.Equal(t, 200, code)
-	assert.Equal(t, "konten baru", dataMap(out)["excerpt"])
-	assert.Equal(t, "http://c", dataMap(out)["cover_image_path"])
-	// publish / unpublish lewat is_published
-	code, out = call(r, "PUT", firstPath, tok, gin.H{"is_published": false})
-	assert.Equal(t, 200, code)
-	assert.Nil(t, dataMap(out)["published_at"])
-	code, out = call(r, "PUT", firstPath, tok, gin.H{"is_published": true})
-	assert.Equal(t, 200, code)
-	assert.NotNil(t, dataMap(out)["published_at"])
-	code, _ = call(r, "PUT", firstPath, tok, gin.H{"is_published": true}) // sudah terbit: published_at tetap
-	assert.Equal(t, 200, code)
-	code, _ = call(r, "PUT", firstPath, tok, gin.H{"category": "Olahraga"})
+	code, _ = call(r, "PUT", firstPath, tok, gin.H{"title": "J", "content": "k", "category": "Olahraga"})
 	assert.Equal(t, 400, code)
 	code, _ = call(r, "PUT", firstPath, tok, "{")
 	assert.Equal(t, 400, code)
-	code, _ = call(r, "PUT", "/posts/abc", tok, gin.H{"title": "J"})
+	code, _ = call(r, "PUT", "/posts/abc", tok, gin.H{"title": "J", "content": "k"})
 	assert.Equal(t, 400, code)
-	code, _ = call(r, "PUT", "/posts/99999999", tok, gin.H{"title": "Tidak Ada"})
+	code, _ = call(r, "PUT", "/posts/999", tok, gin.H{"title": "J", "content": "k"})
 	assert.Equal(t, 404, code)
-	code, _ = call(r, "PUT", firstPath, other, gin.H{"title": "Dibajak"})
-	assert.Equal(t, 403, code)
 
 	// toggle: draf -> terbit -> draf
 	code, out = call(r, "PATCH", secondPath+"/toggle-publish", tok, nil)
@@ -232,8 +212,6 @@ func TestAuthorFlowAndPublicEndpoints(t *testing.T) {
 	assert.Equal(t, 400, code)
 	code, _ = call(r, "PATCH", "/posts/999/toggle-publish", tok, nil)
 	assert.Equal(t, 404, code)
-	code, _ = call(r, "PATCH", secondPath+"/toggle-publish", other, nil)
-	assert.Equal(t, 403, code)
 
 	// publik
 	code, out = call(r, "GET", "/public/posts", "", nil)
@@ -253,8 +231,6 @@ func TestAuthorFlowAndPublicEndpoints(t *testing.T) {
 
 	// hapus
 	code, _ = call(r, "DELETE", firstPath, other, nil)
-	assert.Equal(t, 403, code)
-	code, _ = call(r, "DELETE", "/posts/99999999", tok, nil)
 	assert.Equal(t, 404, code)
 	code, _ = call(r, "DELETE", firstPath, tok, nil)
 	assert.Equal(t, 200, code)
@@ -273,29 +249,14 @@ func TestAdminEndpoints(t *testing.T) {
 	code, _ := call(r, "GET", "/admin/users", mtok, nil)
 	assert.Equal(t, 403, code)
 
-	// admin boleh membaca, mengubah, menerbitkan, dan menghapus artikel siapa pun
-	_, list := call(r, "GET", "/posts", mtok, nil)
-	pid := dataList(list)[0].(map[string]any)["id"]
-	path := fmt.Sprintf("/posts/%v", pid)
-	code, _ = call(r, "GET", path, admin, nil)
-	assert.Equal(t, 200, code)
-	code, _ = call(r, "PUT", path, admin, gin.H{"title": "Disunting Admin"})
-	assert.Equal(t, 200, code)
-	code, _ = call(r, "PATCH", path+"/toggle-publish", admin, nil)
-	assert.Equal(t, 200, code)
-	code, _ = call(r, "DELETE", path, admin, nil)
-	assert.Equal(t, 200, code)
-	call(r, "POST", "/posts", mtok, gin.H{"title": "C", "content": "isi", "is_published": true})
-
 	code, out := call(r, "GET", "/admin/users", admin, nil)
 	assert.Equal(t, 200, code)
 	users := dataList(out)
 	require.Len(t, users, 2)
 	row := users[1].(map[string]any)
 	assert.Equal(t, "member", row["username"])
-	assert.EqualValues(t, 2, row["total_articles"])
-	assert.NotEmpty(t, row["created_at"])
-	assert.EqualValues(t, 2, row["total_published"])
+	assert.EqualValues(t, 2, row["total_posts"])
+	assert.EqualValues(t, 1, row["total_published"])
 
 	code, out = call(r, "GET", "/admin/posts", admin, nil)
 	assert.Equal(t, 200, code)
@@ -304,9 +265,8 @@ func TestAdminEndpoints(t *testing.T) {
 	code, out = call(r, "GET", fmt.Sprintf("/admin/users/%d/posts", member.ID), admin, nil)
 	assert.Equal(t, 200, code)
 	assert.Len(t, dataList(out), 2)
-	code, out = call(r, "GET", "/admin/users/999/posts", admin, nil)
-	assert.Equal(t, 200, code)
-	assert.Empty(t, dataList(out))
+	code, _ = call(r, "GET", "/admin/users/999/posts", admin, nil)
+	assert.Equal(t, 404, code)
 	code, _ = call(r, "GET", "/admin/users/abc/posts", admin, nil)
 	assert.Equal(t, 400, code)
 }
@@ -334,7 +294,7 @@ func TestClosedDatabaseReturns500(t *testing.T) {
 
 type fakeRepo struct {
 	Repository
-	failSlug, failCreate, failUpdate, failDelete, failFind, nilUsers bool
+	failSlug, failCreate, failUpdate, failDelete, failExists, nilUsers bool
 }
 
 func (f *fakeRepo) SlugExists(s string, id uint) (bool, error) {
@@ -361,11 +321,11 @@ func (f *fakeRepo) Delete(p *Post) error {
 	}
 	return f.Repository.Delete(p)
 }
-func (f *fakeRepo) FindByID(id uint) (*Post, error) {
-	if f.failFind {
-		return nil, errBoom
+func (f *fakeRepo) UserExists(id uint) (bool, error) {
+	if f.failExists {
+		return false, errBoom
 	}
-	return f.Repository.FindByID(id)
+	return f.Repository.UserExists(id)
 }
 func (f *fakeRepo) ListUsersWithCounts() ([]AdminUser, error) {
 	if f.nilUsers {
@@ -389,18 +349,15 @@ func TestServiceErrorBranches(t *testing.T) {
 	_, err = svc(&fakeRepo{failCreate: true}).Create(u.ID, req)
 	assert.ErrorIs(t, err, errBoom)
 
-	title := "Judul Lain"
-	upd := UpdateRequest{Title: &title}
-	_, err = svc(&fakeRepo{failSlug: true}).Update(u.ID, "member", seed.ID, upd)
+	_, err = svc(&fakeRepo{failSlug: true}).Update(u.ID, seed.ID, req)
 	assert.ErrorIs(t, err, errBoom)
-	_, err = svc(&fakeRepo{failUpdate: true}).Update(u.ID, "member", seed.ID, upd)
+	_, err = svc(&fakeRepo{failUpdate: true}).Update(u.ID, seed.ID, req)
 	assert.ErrorIs(t, err, errBoom)
-	_, err = svc(&fakeRepo{failUpdate: true}).TogglePublish(u.ID, "member", seed.ID)
+	_, err = svc(&fakeRepo{failUpdate: true}).TogglePublish(u.ID, seed.ID)
 	assert.ErrorIs(t, err, errBoom)
-	assert.ErrorIs(t, svc(&fakeRepo{failDelete: true}).Delete(u.ID, "member", seed.ID), errBoom)
+	assert.ErrorIs(t, svc(&fakeRepo{failDelete: true}).Delete(u.ID, seed.ID), errBoom)
 
-	// kegagalan DB saat mengambil artikel (bukan "tidak ditemukan")
-	_, err = svc(&fakeRepo{failFind: true}).Get(u.ID, "member", seed.ID)
+	_, err = svc(&fakeRepo{failExists: true}).AdminUserPosts(u.ID)
 	assert.ErrorIs(t, err, errBoom)
 
 	users, err := svc(&fakeRepo{nilUsers: true}).AdminUsers()
