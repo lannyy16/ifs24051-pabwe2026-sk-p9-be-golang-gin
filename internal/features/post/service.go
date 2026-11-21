@@ -132,39 +132,6 @@ func ToResponse(p *Post) PostResponse {
 	}
 }
 
-// ToPublicResponse mengubah Post menjadi PublicPostResponse (tanpa user_id).
-func ToPublicResponse(p *Post) PublicPostResponse {
-	full := ToResponse(p)
-
-	return PublicPostResponse{
-		ID:             full.ID,
-		AuthorName:     full.AuthorName,
-		Title:          full.Title,
-		Slug:           full.Slug,
-		Category:       full.Category,
-		Excerpt:        full.Excerpt,
-		Content:        full.Content,
-		CoverImagePath: full.CoverImagePath,
-		IsPublished:    full.IsPublished,
-		PublishedAt:    full.PublishedAt,
-		ReadingTime:    full.ReadingTime,
-		Author:         full.Author,
-		CreatedAt:      full.CreatedAt,
-		UpdatedAt:      full.UpdatedAt,
-	}
-}
-
-// toPublicResponses mengubah kumpulan Post menjadi kumpulan PublicPostResponse.
-func toPublicResponses(posts []Post) []PublicPostResponse {
-	out := make([]PublicPostResponse, 0, len(posts))
-
-	for i := range posts {
-		out = append(out, ToPublicResponse(&posts[i]))
-	}
-
-	return out
-}
-
 // toResponses mengubah kumpulan Post menjadi kumpulan PostResponse.
 func toResponses(posts []Post) []PostResponse {
 	out := make([]PostResponse, 0, len(posts))
@@ -215,17 +182,17 @@ func (s *Service) mine(userID, id uint) (*Post, error) {
 }
 
 // ListPublic mengembalikan artikel terbit dengan pencarian dan filter kategori.
-func (s *Service) ListPublic(q, category string) ([]PublicPostResponse, error) {
+func (s *Service) ListPublic(q, category string) ([]PostResponse, error) {
 	posts, err := s.repo.ListPublished(q, category)
 	if err != nil {
 		return nil, err
 	}
 
-	return toPublicResponses(posts), nil
+	return toResponses(posts), nil
 }
 
 // GetPublic mengembalikan satu artikel terbit berdasarkan slug.
-func (s *Service) GetPublic(slug string) (*PublicPostResponse, error) {
+func (s *Service) GetPublic(slug string) (*PostResponse, error) {
 	p, err := s.repo.FindPublishedBySlug(slug)
 
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -236,7 +203,7 @@ func (s *Service) GetPublic(slug string) (*PublicPostResponse, error) {
 		return nil, err
 	}
 
-	res := ToPublicResponse(p)
+	res := ToResponse(p)
 	return &res, nil
 }
 
@@ -404,10 +371,6 @@ func (s *Service) AdminUsers() ([]AdminUser, error) {
 
 	if users == nil {
 		users = []AdminUser{}
-	}
-
-	for i := range users {
-		users[i].TotalArticles = users[i].TotalPosts
 	}
 
 	return users, nil
