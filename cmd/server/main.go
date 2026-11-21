@@ -12,9 +12,9 @@ import (
 func main() {
 	cfg := config.Load()
 
-	db, err := database.ConnectPostgres(cfg)
+	db, err := database.Connect(cfg)
 	if err != nil {
-		log.Fatalf("gagal terhubung ke PostgreSQL: %v", err)
+		log.Fatalf("gagal terhubung ke basis data: %v", err)
 	}
 	if err := database.Migrate(db); err != nil {
 		log.Fatalf("gagal migrasi basis data: %v", err)

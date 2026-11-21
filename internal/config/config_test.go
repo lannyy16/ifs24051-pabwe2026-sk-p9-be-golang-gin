@@ -16,6 +16,7 @@ func TestLoadDefaults(t *testing.T) {
 	assert.Equal(t, "127.0.0.1", cfg.DBHost)
 	assert.Equal(t, "nama-model", cfg.OpenAIModel)
 	assert.Equal(t, ":8081", cfg.Addr())
+	assert.Equal(t, "blog.db", cfg.SQLitePath)
 }
 
 func TestLoadFromEnvironment(t *testing.T) {
@@ -29,6 +30,6 @@ func TestLoadFromEnvironment(t *testing.T) {
 	cfg := Load()
 	assert.Equal(t, ":9999", cfg.Addr())
 	assert.Equal(t,
-		"host=db port=5433 user=u password=p dbname=mydb sslmode=require TimeZone=Asia/Jakarta",
+		"host=db port=5433 user=u password=p dbname=mydb sslmode=require TimeZone=Asia/Jakarta connect_timeout=5",
 		cfg.DSN())
 }

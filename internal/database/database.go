@@ -1,6 +1,9 @@
 package database
 
 import (
+	"log"
+	"strings"
+
 	"github.com/glebarez/sqlite"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
@@ -24,15 +27,47 @@ func ConnectPostgres(cfg *config.Config) (*gorm.DB, error) {
 	return Open(postgres.Open(cfg.DSN()))
 }
 
-// ConnectSQLiteMemory membuka SQLite in-memory untuk unit test.
-func ConnectSQLiteMemory() (*gorm.DB, error) {
-	db, err := Open(sqlite.Open(":memory:"))
+// ConnectSQLiteFile membuka SQLite berbasis berkas (atau ":memory:").
+func ConnectSQLiteFile(path string) (*gorm.DB, error) {
+	db, err := Open(sqlite.Open(path))
 	if err == nil {
 		if sqlDB, dbErr := db.DB(); dbErr == nil {
 			sqlDB.SetMaxOpenConns(1)
 		}
 	}
 	return db, err
+}
+
+// ConnectSQLiteMemory membuka SQLite in-memory untuk unit test.
+func ConnectSQLiteMemory() (*gorm.DB, error) {
+	return ConnectSQLiteFile(":memory:")
+}
+
+var (
+	connectPostgres = ConnectPostgres
+	connectSQLite   = ConnectSQLiteFile
+)
+
+// Connect memilih basis data: PostgreSQL bila tersedia. Jika PostgreSQL tidak
+// dapat dihubungi (atau DB_CONNECTION=sqlite), aplikasi memakai SQLite agar
+// server tetap hidup dan tidak mati saat start (penyebab 502 Bad Gateway).
+func Connect(cfg *config.Config) (*gorm.DB, error) {
+	if strings.EqualFold(cfg.DBConnection, "sqlite") {
+		return connectSQLite(cfg.SQLitePath)
+	}
+
+	db, err := connectPostgres(cfg)
+	if err == nil {
+		return db, nil
+	}
+
+	log.Printf("PostgreSQL tidak dapat dihubungi (%v); memakai SQLite %q", err, cfg.SQLitePath)
+	db, err = connectSQLite(cfg.SQLitePath)
+	if err != nil {
+		log.Printf("SQLite berkas gagal dibuka (%v); memakai SQLite in-memory", err)
+		return ConnectSQLiteMemory()
+	}
+	return db, nil
 }
 
 // Migrate menjalankan AutoMigrate untuk seluruh model.

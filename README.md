@@ -70,3 +70,8 @@ Aturan `.gitignore` memakai awalan `/` (`/server`, `/main`, `/app`) agar `intern
 
 ## Port deployment Delcom
 Aplikasi menggunakan environment `PORT` bila disediakan platform; jika tidak, gunakan `APP_PORT` (default 8081). Jangan commit file `.env` atau secret produksi.
+
+## Basis data cadangan (SQLite)
+Jika PostgreSQL tidak dapat dihubungi saat start (atau `DB_CONNECTION=sqlite`), server otomatis memakai
+SQLite (`SQLITE_PATH`, default `blog.db`; bila berkas tidak bisa dibuat, memakai in-memory). Server tidak lagi
+berhenti saat database tidak tersedia, sehingga Nginx tidak mengembalikan 502 Bad Gateway.

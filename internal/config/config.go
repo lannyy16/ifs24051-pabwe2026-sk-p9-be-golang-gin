@@ -23,6 +23,7 @@ type Config struct {
 	DBUsername   string
 	DBPassword   string
 	DBSSLMode    string
+	SQLitePath   string
 
 	SearchEngineEndpoint string
 	OpenAIEndpoint       string
@@ -47,6 +48,7 @@ func Load() *Config {
 		DBUsername:   get("DB_USERNAME", "postgres"),
 		DBPassword:   get("DB_PASSWORD", "postgres"),
 		DBSSLMode:    get("DB_SSLMODE", "disable"),
+		SQLitePath:   get("SQLITE_PATH", "blog.db"),
 
 		SearchEngineEndpoint: get("SEARCH_ENGINE_ENDPOINT", "https://delcom.org/api/v1/search"),
 		OpenAIEndpoint:       get("OPENAI_ENDPOINT", "https://delcom.org/api/v1"),
@@ -58,7 +60,7 @@ func Load() *Config {
 // DSN membangun connection string PostgreSQL.
 func (c *Config) DSN() string {
 	return fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s TimeZone=Asia/Jakarta",
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s TimeZone=Asia/Jakarta connect_timeout=5",
 		c.DBHost, c.DBPort, c.DBUsername, c.DBPassword, c.DBDatabase, c.DBSSLMode,
 	)
 }

@@ -1,6 +1,8 @@
 package database
 
 import (
+	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -83,4 +85,52 @@ func TestSeedErrors(t *testing.T) {
 	require.NoError(t, Migrate(db))
 	require.NoError(t, db.Create(&auth.User{Username: "orang", Email: "admin@delcom.org", Password: "x", Role: "member"}).Error)
 	assert.Error(t, Seed(db, &config.Config{AdminUsername: "admin", AdminPassword: "admin"}))
+}
+
+func stubDrivers(t *testing.T, pg func(*config.Config) (*gorm.DB, error)) {
+	t.Helper()
+	origPG, origLite := connectPostgres, connectSQLite
+	t.Cleanup(func() { connectPostgres, connectSQLite = origPG, origLite })
+	connectPostgres = pg
+}
+
+func TestConnectSQLiteFile(t *testing.T) {
+	db, err := ConnectSQLiteFile(filepath.Join(t.TempDir(), "t.db"))
+	require.NoError(t, err)
+	assert.NoError(t, Migrate(db))
+	closeDB(t, db)
+
+	_, err = ConnectSQLiteFile("/nonexistent-dir/xx/yy.db")
+	assert.Error(t, err)
+}
+
+func TestConnectUsesPostgresWhenAvailable(t *testing.T) {
+	mem := memDB(t)
+	stubDrivers(t, func(*config.Config) (*gorm.DB, error) { return mem, nil })
+	db, err := Connect(&config.Config{DBConnection: "pgsql"})
+	require.NoError(t, err)
+	assert.Same(t, mem, db)
+}
+
+func TestConnectSQLiteExplicit(t *testing.T) {
+	stubDrivers(t, func(*config.Config) (*gorm.DB, error) {
+		return nil, errors.New("postgres tidak boleh dipakai")
+	})
+	db, err := Connect(&config.Config{DBConnection: "SQLite", SQLitePath: filepath.Join(t.TempDir(), "e.db")})
+	require.NoError(t, err)
+	assert.NoError(t, Migrate(db))
+}
+
+func TestConnectFallsBackToSQLiteFile(t *testing.T) {
+	stubDrivers(t, func(*config.Config) (*gorm.DB, error) { return nil, errors.New("down") })
+	db, err := Connect(&config.Config{DBConnection: "pgsql", SQLitePath: filepath.Join(t.TempDir(), "f.db")})
+	require.NoError(t, err)
+	assert.NoError(t, Migrate(db))
+}
+
+func TestConnectFallsBackToMemory(t *testing.T) {
+	stubDrivers(t, func(*config.Config) (*gorm.DB, error) { return nil, errors.New("down") })
+	db, err := Connect(&config.Config{DBConnection: "pgsql", SQLitePath: "/nonexistent-dir/xx/yy.db"})
+	require.NoError(t, err)
+	assert.NoError(t, Migrate(db))
 }
