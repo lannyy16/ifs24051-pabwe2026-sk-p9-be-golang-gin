@@ -46,6 +46,7 @@ func ConnectSQLiteMemory() (*gorm.DB, error) {
 var (
 	connectPostgres = ConnectPostgres
 	connectSQLite   = ConnectSQLiteFile
+	connectMemory   = ConnectSQLiteMemory
 )
 
 // Connect memilih basis data: PostgreSQL bila tersedia. Jika PostgreSQL tidak
@@ -65,9 +66,40 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 	db, err = connectSQLite(cfg.SQLitePath)
 	if err != nil {
 		log.Printf("SQLite berkas gagal dibuka (%v); memakai SQLite in-memory", err)
-		return ConnectSQLiteMemory()
+		return connectMemory()
 	}
 	return db, nil
+}
+
+// prepare menjalankan migrasi lalu seeding akun bawaan.
+func prepare(db *gorm.DB, cfg *config.Config) error {
+	if err := Migrate(db); err != nil {
+		return err
+	}
+	return Seed(db, cfg)
+}
+
+// Setup menghubungkan, memigrasi, dan men-seed basis data. Bila PostgreSQL
+// terhubung tetapi migrasi/seed gagal (mis. skema lama yang bentrok), aplikasi
+// beralih ke SQLite in-memory yang bersih agar server tetap hidup.
+func Setup(cfg *config.Config) (*gorm.DB, error) {
+	db, err := Connect(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if err = prepare(db, cfg); err == nil {
+		return db, nil
+	}
+
+	log.Printf("migrasi/seed gagal (%v); memakai SQLite in-memory", err)
+	mem, err := connectMemory()
+	if err != nil {
+		return nil, err
+	}
+	if err := prepare(mem, cfg); err != nil {
+		return nil, err
+	}
+	return mem, nil
 }
 
 // Migrate menjalankan AutoMigrate untuk seluruh model.

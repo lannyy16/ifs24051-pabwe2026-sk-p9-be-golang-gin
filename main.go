@@ -11,17 +11,9 @@ import (
 func main() {
 	cfg := config.Load()
 
-	db, err := database.Connect(cfg)
+	db, err := database.Setup(cfg)
 	if err != nil {
-		log.Fatalf("gagal terhubung ke basis data: %v", err)
-	}
-
-	if err := database.Migrate(db); err != nil {
-		log.Fatalf("gagal migrasi basis data: %v", err)
-	}
-
-	if err := database.Seed(db, cfg); err != nil {
-		log.Fatalf("gagal seeding akun bawaan: %v", err)
+		log.Fatalf("gagal menyiapkan basis data: %v", err)
 	}
 
 	r := server.NewRouter(cfg, db)

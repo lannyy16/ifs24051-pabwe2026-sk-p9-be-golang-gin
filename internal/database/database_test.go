@@ -89,8 +89,8 @@ func TestSeedErrors(t *testing.T) {
 
 func stubDrivers(t *testing.T, pg func(*config.Config) (*gorm.DB, error)) {
 	t.Helper()
-	origPG, origLite := connectPostgres, connectSQLite
-	t.Cleanup(func() { connectPostgres, connectSQLite = origPG, origLite })
+	origPG, origLite, origMem := connectPostgres, connectSQLite, connectMemory
+	t.Cleanup(func() { connectPostgres, connectSQLite, connectMemory = origPG, origLite, origMem })
 	connectPostgres = pg
 }
 
@@ -133,4 +133,52 @@ func TestConnectFallsBackToMemory(t *testing.T) {
 	db, err := Connect(&config.Config{DBConnection: "pgsql", SQLitePath: "/nonexistent-dir/xx/yy.db"})
 	require.NoError(t, err)
 	assert.NoError(t, Migrate(db))
+}
+
+func closedDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	db := memDB(t)
+	closeDB(t, db)
+	return db
+}
+
+func TestSetupHappyPath(t *testing.T) {
+	mem := memDB(t)
+	stubDrivers(t, func(*config.Config) (*gorm.DB, error) { return mem, nil })
+	db, err := Setup(&config.Config{DBConnection: "pgsql", AdminUsername: "admin", AdminPassword: "admin"})
+	require.NoError(t, err)
+	assert.Same(t, mem, db)
+}
+
+func TestSetupFallsBackWhenMigrateFails(t *testing.T) {
+	broken := closedDB(t)
+	stubDrivers(t, func(*config.Config) (*gorm.DB, error) { return broken, nil })
+	db, err := Setup(&config.Config{DBConnection: "pgsql", AdminUsername: "admin", AdminPassword: "admin"})
+	require.NoError(t, err)
+	assert.NotSame(t, broken, db)
+
+	var n int64
+	require.NoError(t, db.Model(&auth.User{}).Count(&n).Error)
+	assert.Equal(t, int64(2), n)
+}
+
+func TestSetupConnectError(t *testing.T) {
+	stubDrivers(t, func(*config.Config) (*gorm.DB, error) { return nil, errors.New("down") })
+	_, err := Setup(&config.Config{DBConnection: "sqlite", SQLitePath: "/nonexistent-dir/xx/yy.db"})
+	assert.Error(t, err)
+}
+
+func TestSetupMemoryConnectFails(t *testing.T) {
+	broken := closedDB(t)
+	stubDrivers(t, func(*config.Config) (*gorm.DB, error) { return broken, nil })
+	connectMemory = func() (*gorm.DB, error) { return nil, errors.New("memori gagal") }
+	_, err := Setup(&config.Config{DBConnection: "pgsql", AdminUsername: "admin", AdminPassword: "admin"})
+	assert.Error(t, err)
+}
+
+func TestSetupPrepareFailsEverywhere(t *testing.T) {
+	mem := memDB(t)
+	stubDrivers(t, func(*config.Config) (*gorm.DB, error) { return mem, nil })
+	_, err := Setup(&config.Config{DBConnection: "pgsql", AdminUsername: "admin", AdminPassword: strings.Repeat("x", 100)})
+	assert.Error(t, err)
 }
