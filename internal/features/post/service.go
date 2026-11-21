@@ -12,10 +12,14 @@ import (
 const wordsPerMinute = 200
 
 // Service berisi logika bisnis artikel.
-type Service struct{ repo Repository }
+type Service struct {
+	repo Repository
+}
 
 // NewService membuat Service.
-func NewService(repo Repository) *Service { return &Service{repo: repo} }
+func NewService(repo Repository) *Service {
+	return &Service{repo: repo}
+}
 
 // Slugify mengubah judul menjadi slug URL (huruf kecil, angka, tanda hubung).
 func Slugify(title string) string {
@@ -40,7 +44,7 @@ func Slugify(title string) string {
 	return slug
 }
 
-// ReadingTime menghitung estimasi waktu baca dalam menit (kata / 200 wpm, minimal 1).
+// ReadingTime menghitung estimasi waktu baca dalam menit (200 kata per menit).
 func ReadingTime(content string) int {
 	words := len(strings.Fields(content))
 	minutes := (words + wordsPerMinute - 1) / wordsPerMinute
@@ -84,6 +88,7 @@ func ResolveCategory(candidates ...string) string {
 	return DefaultCategory
 }
 
+// makeExcerpt membuat ringkasan maksimal 160 karakter.
 func makeExcerpt(content string) string {
 	text := strings.Join(strings.Fields(content), " ")
 	runes := []rune(text)
@@ -92,7 +97,7 @@ func makeExcerpt(content string) string {
 		return text
 	}
 
-	return strings.TrimSpace(string(runes[:160])) + "â€¦"
+	return strings.TrimSpace(string(runes[:160])) + "\u2026"
 }
 
 // ToResponse mengubah Post menjadi PostResponse.
@@ -127,6 +132,7 @@ func ToResponse(p *Post) PostResponse {
 	}
 }
 
+// toResponses mengubah kumpulan Post menjadi kumpulan PostResponse.
 func toResponses(posts []Post) []PostResponse {
 	out := make([]PostResponse, 0, len(posts))
 
@@ -137,6 +143,7 @@ func toResponses(posts []Post) []PostResponse {
 	return out
 }
 
+// uniqueSlug membuat slug yang unik.
 func (s *Service) uniqueSlug(title string, excludeID uint) (string, error) {
 	base := Slugify(title)
 	candidate := base
@@ -174,7 +181,7 @@ func (s *Service) mine(userID, id uint) (*Post, error) {
 	return p, nil
 }
 
-// ListPublic mengembalikan artikel terbit dengan pencarian & filter kategori.
+// ListPublic mengembalikan artikel terbit dengan pencarian dan filter kategori.
 func (s *Service) ListPublic(q, category string) ([]PostResponse, error) {
 	posts, err := s.repo.ListPublished(q, category)
 	if err != nil {

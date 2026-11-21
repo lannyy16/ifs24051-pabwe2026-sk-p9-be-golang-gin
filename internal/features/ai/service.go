@@ -21,12 +21,13 @@ type (
 	Searcher interface {
 		Search(ctx context.Context, query string) ([]Source, error)
 	}
+
 	Completer interface {
 		Complete(ctx context.Context, messages []Message) (string, error)
 	}
 )
 
-// Service menghasilkan draf artikel utuh dengan (opsional) konteks Search Engine.
+// Service menghasilkan draf artikel.
 type Service struct {
 	search Searcher
 	chat   Completer
@@ -34,7 +35,10 @@ type Service struct {
 
 // NewService membuat Service.
 func NewService(search Searcher, chat Completer) *Service {
-	return &Service{search: search, chat: chat}
+	return &Service{
+		search: search,
+		chat:   chat,
+	}
 }
 
 type article struct {
@@ -44,61 +48,135 @@ type article struct {
 	Content  string `json:"content"`
 }
 
-// Generate menjalankan alur: Search Engine -> prompt -> OpenAI -> artikel terstruktur.
-func (s *Service) Generate(ctx context.Context, req GenerateRequest) (*GenerateResponse, error) {
+// Generate menjalankan alur Search Engine -> AI -> artikel.
+func (s *Service) Generate(
+	ctx context.Context,
+	req GenerateRequest,
+) (*GenerateResponse, error) {
+	if s.chat == nil {
+		return nil, fmt.Errorf(
+			"%w: client AI belum dikonfigurasi",
+			ErrUpstream,
+		)
+	}
+
+	req.Topic = strings.TrimSpace(req.Topic)
+	req.Category = strings.TrimSpace(req.Category)
+
+	if len([]rune(req.Topic)) < 3 {
+		return nil, errors.New("topic wajib diisi minimal 3 karakter")
+	}
+
 	sources := []Source{}
-	if req.IncludeWebSearch {
-		// Kegagalan penelusuran tidak menggagalkan pembuatan artikel.
+
+	if req.IncludeWebSearch && s.search != nil {
+		// Kegagalan pencarian tidak menggagalkan pembuatan artikel.
 		if found, err := s.search.Search(ctx, req.Topic); err == nil {
 			sources = found
 		}
 	}
-	raw, err := s.chat.Complete(ctx, buildMessages(req, sources))
+
+	raw, err := s.chat.Complete(
+		ctx,
+		buildMessages(req, sources),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrUpstream, err)
 	}
+
 	var art article
-	if err := json.Unmarshal([]byte(extractJSON(raw)), &art); err != nil ||
-		strings.TrimSpace(art.Title) == "" || strings.TrimSpace(art.Content) == "" {
+
+	if err := json.Unmarshal(
+		[]byte(extractJSON(raw)),
+		&art,
+	); err != nil {
 		return nil, ErrInvalidAIResponse
 	}
+
+	title := strings.TrimSpace(art.Title)
+	content := strings.TrimSpace(art.Content)
+
+	if title == "" || content == "" {
+		return nil, ErrInvalidAIResponse
+	}
+
 	return &GenerateResponse{
-		Title:         strings.TrimSpace(art.Title),
+		Title:         title,
 		Category:      post.ResolveCategory(req.Category, art.Category),
 		Excerpt:       strings.TrimSpace(art.Excerpt),
-		Content:       art.Content,
+		Content:       content,
 		Sources:       sources,
 		UsedWebSearch: len(sources) > 0,
 	}, nil
 }
 
-// extractJSON mengambil objek JSON terluar (menyingkirkan pagar ```json dan teks pembuka).
+// extractJSON mengambil objek JSON terluar dari jawaban AI.
 func extractJSON(raw string) string {
 	start := strings.Index(raw, "{")
 	end := strings.LastIndex(raw, "}")
+
 	if start < 0 || end <= start {
 		return raw
 	}
+
 	return raw[start : end+1]
 }
 
-func buildMessages(req GenerateRequest, sources []Source) []Message {
+// buildMessages membuat prompt untuk AI.
+func buildMessages(
+	req GenerateRequest,
+	sources []Source,
+) []Message {
 	system := "Anda adalah penulis blog profesional berbahasa Indonesia. " +
 		"Balas HANYA dengan satu objek JSON valid tanpa teks lain, berisi kunci: " +
-		"\"title\" (judul menarik), \"category\" (salah satu dari: " + strings.Join(post.Categories, ", ") + "), " +
-		"\"excerpt\" (ringkasan pemikat 1-2 kalimat), dan \"content\" (artikel lengkap dalam format Markdown " +
-		"dengan sub-judul, paragraf runtut, dan kesimpulan)."
+		"\"title\" (judul menarik), \"category\" (salah satu dari: " +
+		strings.Join(post.Categories, ", ") + "), " +
+		"\"excerpt\" (ringkasan pemikat 1-2 kalimat), dan " +
+		"\"content\" (artikel lengkap dalam format Markdown dengan " +
+		"sub-judul, paragraf runtut, dan kesimpulan)."
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "Tulis artikel blog tentang topik: %s\n", req.Topic)
+
+	fmt.Fprintf(
+		&b,
+		"Tulis artikel blog tentang topik: %s\n",
+		req.Topic,
+	)
+
 	if req.Category != "" {
-		fmt.Fprintf(&b, "Kategori yang diinginkan: %s\n", req.Category)
+		fmt.Fprintf(
+			&b,
+			"Kategori yang diinginkan: %s\n",
+			req.Category,
+		)
 	}
+
 	if len(sources) > 0 {
-		b.WriteString("\nGunakan fakta terkini dari hasil penelusuran web berikut dan sitasi dengan penanda [1], [2], dst.:\n")
+		b.WriteString(
+			"\nGunakan fakta terkini dari hasil penelusuran web berikut " +
+				"dan sitasi dengan penanda [1], [2], dst.:\n",
+		)
+
 		for i, src := range sources {
-			fmt.Fprintf(&b, "[%d] %s — %s (%s)\n", i+1, src.Title, src.Snippet, src.URL)
+			fmt.Fprintf(
+				&b,
+				"[%d] %s — %s (%s)\n",
+				i+1,
+				src.Title,
+				src.Snippet,
+				src.URL,
+			)
 		}
 	}
-	return []Message{{Role: "system", Content: system}, {Role: "user", Content: b.String()}}
+
+	return []Message{
+		{
+			Role:    "system",
+			Content: system,
+		},
+		{
+			Role:    "user",
+			Content: b.String(),
+		},
+	}
 }

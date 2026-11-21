@@ -28,19 +28,20 @@ func (h *Handler) Generate(c *gin.Context) {
 
 	// Validasi request JSON.
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, 400, "Topic wajib diisi (minimal 3 karakter)")
+		response.Fail(c, 400, "topic wajib diisi (minimal 3 karakter)")
 		return
 	}
 
-	// Memastikan topik tidak hanya berisi spasi.
+	// Menghapus spasi di awal dan akhir topik.
 	req.Topic = strings.TrimSpace(req.Topic)
 
+	// Memastikan topik minimal tiga karakter.
 	if len([]rune(req.Topic)) < 3 {
-		response.Fail(c, 400, "Topic wajib diisi (minimal 3 karakter)")
+		response.Fail(c, 400, "topic wajib diisi (minimal 3 karakter)")
 		return
 	}
 
-	// Menghapus spasi berlebih pada kategori.
+	// Membersihkan kategori.
 	req.Category = strings.TrimSpace(req.Category)
 
 	// Memproses pembuatan artikel.
