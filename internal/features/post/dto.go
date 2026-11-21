@@ -79,6 +79,25 @@ type PostResponse struct {
 	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
+// PublicPostResponse adalah representasi artikel untuk endpoint publik
+// (tanpa data internal seperti user_id).
+type PublicPostResponse struct {
+	ID             uint       `json:"id"`
+	AuthorName     string     `json:"author_name"`
+	Title          string     `json:"title"`
+	Slug           string     `json:"slug"`
+	Category       string     `json:"category"`
+	Excerpt        string     `json:"excerpt"`
+	Content        string     `json:"content"`
+	CoverImagePath string     `json:"cover_image_path"`
+	IsPublished    bool       `json:"is_published"`
+	PublishedAt    *time.Time `json:"published_at"`
+	ReadingTime    int        `json:"reading_time"`
+	Author         AuthorInfo `json:"author"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
 // StatsResponse adalah ringkasan statistik artikel penulis.
 // Field lama dipertahankan agar kompatibel dengan frontend.
 type StatsResponse struct {
@@ -97,5 +116,6 @@ type AdminUser struct {
 	Email          string `gorm:"column:email" json:"email"`
 	Role           string `gorm:"column:role" json:"role"`
 	TotalPosts     int64  `gorm:"column:total_posts" json:"total_posts"`
+	TotalArticles  int64  `gorm:"-" json:"total_articles"`
 	TotalPublished int64  `gorm:"column:total_published" json:"total_published"`
 }

@@ -249,3 +249,25 @@ func TestWriteErrorDefault(t *testing.T) {
 	writeError(c, errBoom)
 	assert.Equal(t, 500, w.Code)
 }
+
+func TestFindByIdentityPrefersExactMatch(t *testing.T) {
+	db := newDB(t)
+	repo := NewRepository(db)
+	require.NoError(t, repo.Create(&User{Username: "Admin", Email: "a@x.id", Password: "x", Role: RoleMember}))
+	require.NoError(t, repo.Create(&User{Username: "admin", Email: "b@x.id", Password: "x", Role: RoleAdmin}))
+
+	u, err := repo.FindByIdentity("admin")
+	require.NoError(t, err)
+	assert.Equal(t, RoleAdmin, u.Role)
+
+	u, err = repo.FindByIdentity("b@x.id")
+	require.NoError(t, err)
+	assert.Equal(t, RoleAdmin, u.Role)
+
+	u, err = repo.FindByIdentity("ADMIN")
+	require.NoError(t, err)
+	assert.Equal(t, "Admin", u.Username)
+
+	_, err = repo.FindByIdentity("tidak-ada")
+	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}

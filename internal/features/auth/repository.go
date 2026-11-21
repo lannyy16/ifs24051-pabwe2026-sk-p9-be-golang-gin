@@ -29,12 +29,37 @@ func (r *gormRepository) FindByID(id uint) (*User, error) {
 	return &u, nil
 }
 
+// FindByIdentity mencari pengguna lewat username atau email. Kecocokan persis
+// diutamakan (username, lalu email) sebelum kecocokan tanpa memperhatikan huruf
+// besar/kecil, sehingga akun serupa ("Admin" vs "admin") tidak saling menimpa.
 func (r *gormRepository) FindByIdentity(identity string) (*User, error) {
-	var u User
-	if err := r.db.Where("LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)", identity, identity).First(&u).Error; err != nil {
+	var users []User
+
+	err := r.db.
+		Where("LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)", identity, identity).
+		Order("id").
+		Find(&users).Error
+	if err != nil {
 		return nil, err
 	}
-	return &u, nil
+
+	if len(users) == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+
+	for i := range users {
+		if users[i].Username == identity {
+			return &users[i], nil
+		}
+	}
+
+	for i := range users {
+		if users[i].Email == identity {
+			return &users[i], nil
+		}
+	}
+
+	return &users[0], nil
 }
 
 func (r *gormRepository) UsernameExists(username string, excludeID uint) (bool, error) {
