@@ -383,8 +383,9 @@ func TestAdminEndpoints(t *testing.T) {
 	assert.Equal(t, 200, code)
 	assert.Len(t, dataList(out), 2)
 
-	code, _ = call(r, "GET", "/admin/users/999/posts", admin, nil)
-	assert.Equal(t, 404, code)
+	code, out = call(r, "GET", "/admin/users/999/posts", admin, nil)
+	assert.Equal(t, 200, code)
+	assert.Empty(t, dataList(out))
 
 	code, _ = call(r, "GET", "/admin/users/abc/posts", admin, nil)
 	assert.Equal(t, 400, code)

@@ -393,8 +393,9 @@ func (s *Service) AdminUserPosts(userID uint) ([]PostResponse, error) {
 		return nil, err
 	}
 
+	// Pengguna yang tidak ada mengembalikan daftar kosong (bukan error).
 	if !exists {
-		return nil, ErrNotFound
+		return []PostResponse{}, nil
 	}
 
 	return s.ListMine(userID)
