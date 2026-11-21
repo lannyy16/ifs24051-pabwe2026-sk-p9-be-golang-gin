@@ -197,6 +197,6 @@ func TestHandler(t *testing.T) {
 	assert.Equal(t, 400, code)
 
 	code, out = run(NewService(nil, &fakeChat{err: errBoom}), `{"topic":"Golang"}`)
-	assert.Equal(t, 502, code)
+	assert.Equal(t, 500, code)
 	assert.Equal(t, "error", out["status"])
 }

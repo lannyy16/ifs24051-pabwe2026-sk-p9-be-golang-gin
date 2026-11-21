@@ -49,8 +49,8 @@ func (h *Handler) Generate(c *gin.Context) {
 	if err != nil {
 		response.Error(
 			c,
-			502,
-			"Gagal menghasilkan artikel dengan AI: "+err.Error(),
+			500,
+			"Gagal memproses draf OpenAI: "+err.Error(),
 		)
 		return
 	}
