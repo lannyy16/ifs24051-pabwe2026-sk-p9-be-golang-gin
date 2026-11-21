@@ -8,7 +8,14 @@ import (
 )
 
 // Categories adalah daftar kategori artikel yang valid.
-var Categories = []string{"Teknologi", "Pendidikan", "Gaya Hidup", "Bisnis", "Opini", "Umum"}
+var Categories = []string{
+	"Teknologi",
+	"Pendidikan",
+	"Gaya Hidup",
+	"Bisnis",
+	"Opini",
+	"Umum",
+}
 
 // DefaultCategory dipakai bila kategori kosong.
 const DefaultCategory = "Umum"
@@ -16,6 +23,7 @@ const DefaultCategory = "Umum"
 // Error domain artikel.
 var (
 	ErrNotFound        = errors.New("artikel tidak ditemukan")
+	ErrForbidden       = errors.New("anda tidak memiliki akses ke artikel ini")
 	ErrInvalidCategory = errors.New("kategori tidak valid")
 )
 
@@ -55,6 +63,8 @@ type AuthorInfo struct {
 // PostResponse adalah representasi artikel pada API.
 type PostResponse struct {
 	ID             uint       `json:"id"`
+	UserID         uint       `json:"user_id"`
+	AuthorName     string     `json:"author_name"`
 	Title          string     `json:"title"`
 	Slug           string     `json:"slug"`
 	Category       string     `json:"category"`
@@ -69,11 +79,15 @@ type PostResponse struct {
 	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
-// StatsResponse adalah ringkasan 3 kartu statistik penulis.
+// StatsResponse adalah ringkasan statistik artikel penulis.
+// Field lama dipertahankan agar kompatibel dengan frontend.
 type StatsResponse struct {
-	Total     int64 `json:"total"`
-	Published int64 `json:"published"`
-	Draft     int64 `json:"draft"`
+	Total         int64 `json:"total"`
+	Published     int64 `json:"published"`
+	Draft         int64 `json:"draft"`
+	TotalArticles int64 `json:"total_articles"`
+	TotalSelesai  int64 `json:"total_selesai"`
+	BelumSelesai  int64 `json:"belum_selesai"`
 }
 
 // AdminUser adalah baris monitoring pengguna beserta jumlah artikelnya.
