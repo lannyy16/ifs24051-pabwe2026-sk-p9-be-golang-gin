@@ -82,6 +82,25 @@ type PostResponse struct {
 	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
+// PublicPostResponse adalah representasi artikel untuk endpoint publik.
+// UserID sengaja tidak disertakan agar informasi internal pemilik tidak terekspos.
+type PublicPostResponse struct {
+	ID             uint       `json:"id"`
+	Title          string     `json:"title"`
+	Slug           string     `json:"slug"`
+	Category       string     `json:"category"`
+	Excerpt        string     `json:"excerpt"`
+	Content        string     `json:"content"`
+	CoverImagePath string     `json:"cover_image_path"`
+	IsPublished    bool       `json:"is_published"`
+	PublishedAt    *time.Time `json:"published_at"`
+	ReadingTime    int        `json:"reading_time"`
+	Author         AuthorInfo `json:"author"`
+	AuthorName     string     `json:"author_name"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
 // StatsResponse adalah ringkasan 3 kartu statistik penulis.
 type StatsResponse struct {
 	TotalArticles int64 `json:"total_articles"`

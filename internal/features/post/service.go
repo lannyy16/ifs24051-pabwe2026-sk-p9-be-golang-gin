@@ -95,6 +95,17 @@ func ToResponse(p *Post) PostResponse {
 	}
 }
 
+// ToPublicResponse mengubah Post menjadi DTO publik tanpa user_id.
+func ToPublicResponse(p *Post) PublicPostResponse {
+	return PublicPostResponse{
+		ID: p.ID, Title: p.Title, Slug: p.Slug, Category: p.Category, Excerpt: p.Excerpt,
+		Content: p.Content, CoverImagePath: p.CoverImagePath, IsPublished: p.IsPublished,
+		PublishedAt: p.PublishedAt, ReadingTime: ReadingTime(p.Content),
+		Author: AuthorInfo{ID: p.User.ID, Username: p.User.Username}, AuthorName: p.User.Username,
+		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
+	}
+}
+
 func toResponses(posts []Post) []PostResponse {
 	out := make([]PostResponse, 0, len(posts))
 	for i := range posts {
@@ -135,16 +146,20 @@ func (s *Service) owned(userID uint, role string, id uint) (*Post, error) {
 }
 
 // ListPublic mengembalikan artikel terbit dengan pencarian & filter kategori.
-func (s *Service) ListPublic(q, category string) ([]PostResponse, error) {
+func (s *Service) ListPublic(q, category string) ([]PublicPostResponse, error) {
 	posts, err := s.repo.ListPublished(q, category)
 	if err != nil {
 		return nil, err
 	}
-	return toResponses(posts), nil
+	out := make([]PublicPostResponse, 0, len(posts))
+	for i := range posts {
+		out = append(out, ToPublicResponse(&posts[i]))
+	}
+	return out, nil
 }
 
 // GetPublic mengembalikan satu artikel terbit berdasarkan slug.
-func (s *Service) GetPublic(slug string) (*PostResponse, error) {
+func (s *Service) GetPublic(slug string) (*PublicPostResponse, error) {
 	p, err := s.repo.FindPublishedBySlug(slug)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrNotFound
@@ -152,7 +167,7 @@ func (s *Service) GetPublic(slug string) (*PostResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	res := ToResponse(p)
+	res := ToPublicResponse(p)
 	return &res, nil
 }
 
