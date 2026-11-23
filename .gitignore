@@ -22,6 +22,3 @@ latest-app.zip
 # Editor
 .vscode/
 .idea/
-
-# Basis data SQLite lokal (cadangan bila PostgreSQL tidak tersedia)
-*.db

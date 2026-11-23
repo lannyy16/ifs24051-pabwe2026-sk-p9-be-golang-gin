@@ -8,14 +8,7 @@ import (
 )
 
 // Categories adalah daftar kategori artikel yang valid.
-var Categories = []string{
-	"Teknologi",
-	"Pendidikan",
-	"Gaya Hidup",
-	"Bisnis",
-	"Opini",
-	"Umum",
-}
+var Categories = []string{"Teknologi", "Pendidikan", "Gaya Hidup", "Bisnis", "Opini", "Umum"}
 
 // DefaultCategory dipakai bila kategori kosong.
 const DefaultCategory = "Umum"
@@ -54,6 +47,16 @@ type PostRequest struct {
 	IsPublished    bool   `json:"is_published"`
 }
 
+// UpdateRequest adalah payload pembaruan parsial: kolom yang tidak dikirim tidak diubah.
+type UpdateRequest struct {
+	Title          *string `json:"title" binding:"omitempty,max=255"`
+	Category       *string `json:"category"`
+	Excerpt        *string `json:"excerpt"`
+	Content        *string `json:"content"`
+	CoverImagePath *string `json:"cover_image_path"`
+	IsPublished    *bool   `json:"is_published"`
+}
+
 // AuthorInfo adalah ringkasan penulis pada respons artikel.
 type AuthorInfo struct {
 	ID       uint   `json:"id"`
@@ -64,7 +67,6 @@ type AuthorInfo struct {
 type PostResponse struct {
 	ID             uint       `json:"id"`
 	UserID         uint       `json:"user_id"`
-	AuthorName     string     `json:"author_name"`
 	Title          string     `json:"title"`
 	Slug           string     `json:"slug"`
 	Category       string     `json:"category"`
@@ -75,16 +77,13 @@ type PostResponse struct {
 	PublishedAt    *time.Time `json:"published_at"`
 	ReadingTime    int        `json:"reading_time"`
 	Author         AuthorInfo `json:"author"`
+	AuthorName     string     `json:"author_name"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
-// StatsResponse adalah ringkasan statistik artikel penulis.
-// Field lama dipertahankan agar kompatibel dengan frontend.
+// StatsResponse adalah ringkasan 3 kartu statistik penulis.
 type StatsResponse struct {
-	Total         int64 `json:"total"`
-	Published     int64 `json:"published"`
-	Draft         int64 `json:"draft"`
 	TotalArticles int64 `json:"total_articles"`
 	TotalSelesai  int64 `json:"total_selesai"`
 	BelumSelesai  int64 `json:"belum_selesai"`
@@ -92,10 +91,11 @@ type StatsResponse struct {
 
 // AdminUser adalah baris monitoring pengguna beserta jumlah artikelnya.
 type AdminUser struct {
-	ID             uint   `gorm:"column:id" json:"id"`
-	Username       string `gorm:"column:username" json:"username"`
-	Email          string `gorm:"column:email" json:"email"`
-	Role           string `gorm:"column:role" json:"role"`
-	TotalPosts     int64  `gorm:"column:total_posts" json:"total_posts"`
-	TotalPublished int64  `gorm:"column:total_published" json:"total_published"`
+	ID             uint      `gorm:"column:id" json:"id"`
+	Username       string    `gorm:"column:username" json:"username"`
+	Email          string    `gorm:"column:email" json:"email"`
+	Role           string    `gorm:"column:role" json:"role"`
+	TotalArticles  int64     `gorm:"column:total_articles" json:"total_articles"`
+	TotalPublished int64     `gorm:"column:total_published" json:"total_published"`
+	CreatedAt      time.Time `gorm:"column:created_at" json:"created_at"`
 }

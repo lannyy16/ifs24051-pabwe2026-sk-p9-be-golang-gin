@@ -91,7 +91,6 @@ func TestRegisterLoginProfileFlow(t *testing.T) {
 	assert.Equal(t, 400, code)
 	code, _ = call(r, "POST", "/register", "", gin.H{"username": "budi2", "email": "budi@mail.com", "password": "rahasia123"})
 	assert.Equal(t, 400, code)
-
 	// validasi
 	code, _ = call(r, "POST", "/register", "", gin.H{"username": "b"})
 	assert.Equal(t, 400, code)
@@ -182,21 +181,18 @@ func (f *fakeRepo) UsernameExists(u string, id uint) (bool, error) {
 	}
 	return f.Repository.UsernameExists(u, id)
 }
-
 func (f *fakeRepo) EmailExists(e string, id uint) (bool, error) {
 	if f.failEmail {
 		return false, errBoom
 	}
 	return f.Repository.EmailExists(e, id)
 }
-
 func (f *fakeRepo) Create(u *User) error {
 	if f.failCreate {
 		return errBoom
 	}
 	return f.Repository.Create(u)
 }
-
 func (f *fakeRepo) Update(u *User) error {
 	if f.failUpdate {
 		return errBoom

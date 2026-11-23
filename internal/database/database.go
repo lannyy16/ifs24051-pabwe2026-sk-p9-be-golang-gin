@@ -1,8 +1,9 @@
+// Package database mengelola koneksi, migrasi, dan seeder basis data.
 package database
 
 import (
-	"log"
-	"strings"
+	"fmt"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	"golang.org/x/crypto/bcrypt"
@@ -17,89 +18,32 @@ import (
 
 // Open membuka koneksi GORM dengan dialector yang diberikan.
 func Open(d gorm.Dialector) (*gorm.DB, error) {
-	return gorm.Open(d, &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
+	return gorm.Open(d, &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 }
 
-// ConnectPostgres menghubungkan aplikasi ke PostgreSQL.
+// Connect memilih SQLite (DB_CONNECTION=sqlite) atau PostgreSQL (default).
+func Connect(cfg *config.Config) (*gorm.DB, error) {
+	if cfg.DBConnection == "sqlite" {
+		return Open(sqlite.Open(cfg.DBDatabase))
+	}
+	return ConnectPostgres(cfg)
+}
+
+// ConnectPostgres menghubungkan aplikasi ke PostgreSQL. PreferSimpleProtocol membuatnya
+// kompatibel dengan connection pooler (Supabase/Neon/PgBouncer) pada lingkungan serverless.
 func ConnectPostgres(cfg *config.Config) (*gorm.DB, error) {
-	return Open(postgres.Open(cfg.DSN()))
+	return Open(postgres.New(postgres.Config{DSN: cfg.DSN(), PreferSimpleProtocol: true}))
 }
 
-// ConnectSQLiteFile membuka SQLite berbasis berkas (atau ":memory:").
-func ConnectSQLiteFile(path string) (*gorm.DB, error) {
-	db, err := Open(sqlite.Open(path))
+// ConnectSQLiteMemory membuka SQLite in-memory (dipakai unit test mandiri).
+func ConnectSQLiteMemory() (*gorm.DB, error) {
+	db, err := Open(sqlite.Open(":memory:"))
 	if err == nil {
 		if sqlDB, dbErr := db.DB(); dbErr == nil {
 			sqlDB.SetMaxOpenConns(1)
 		}
 	}
 	return db, err
-}
-
-// ConnectSQLiteMemory membuka SQLite in-memory untuk unit test.
-func ConnectSQLiteMemory() (*gorm.DB, error) {
-	return ConnectSQLiteFile(":memory:")
-}
-
-var (
-	connectPostgres = ConnectPostgres
-	connectSQLite   = ConnectSQLiteFile
-	connectMemory   = ConnectSQLiteMemory
-)
-
-// Connect memilih basis data: PostgreSQL bila tersedia. Jika PostgreSQL tidak
-// dapat dihubungi (atau DB_CONNECTION=sqlite), aplikasi memakai SQLite agar
-// server tetap hidup dan tidak mati saat start (penyebab 502 Bad Gateway).
-func Connect(cfg *config.Config) (*gorm.DB, error) {
-	if strings.EqualFold(cfg.DBConnection, "sqlite") {
-		return connectSQLite(cfg.SQLitePath)
-	}
-
-	db, err := connectPostgres(cfg)
-	if err == nil {
-		return db, nil
-	}
-
-	log.Printf("PostgreSQL tidak dapat dihubungi (%v); memakai SQLite %q", err, cfg.SQLitePath)
-	db, err = connectSQLite(cfg.SQLitePath)
-	if err != nil {
-		log.Printf("SQLite berkas gagal dibuka (%v); memakai SQLite in-memory", err)
-		return connectMemory()
-	}
-	return db, nil
-}
-
-// prepare menjalankan migrasi lalu seeding akun bawaan.
-func prepare(db *gorm.DB, cfg *config.Config) error {
-	if err := Migrate(db); err != nil {
-		return err
-	}
-	return Seed(db, cfg)
-}
-
-// Setup menghubungkan, memigrasi, dan men-seed basis data. Bila PostgreSQL
-// terhubung tetapi migrasi/seed gagal (mis. skema lama yang bentrok), aplikasi
-// beralih ke SQLite in-memory yang bersih agar server tetap hidup.
-func Setup(cfg *config.Config) (*gorm.DB, error) {
-	db, err := Connect(cfg)
-	if err != nil {
-		return nil, err
-	}
-	if err = prepare(db, cfg); err == nil {
-		return db, nil
-	}
-
-	log.Printf("migrasi/seed gagal (%v); memakai SQLite in-memory", err)
-	mem, err := connectMemory()
-	if err != nil {
-		return nil, err
-	}
-	if err := prepare(mem, cfg); err != nil {
-		return nil, err
-	}
-	return mem, nil
 }
 
 // Migrate menjalankan AutoMigrate untuk seluruh model.
@@ -114,64 +58,107 @@ type seedUser struct {
 	role     string
 }
 
-// Seed membuat akun admin dan member jika belum tersedia.
-func Seed(db *gorm.DB, cfg *config.Config) error {
-	seeds := []seedUser{
-		{
-			username: cfg.AdminUsername,
-			email:    cfg.AdminUsername + "@delcom.org",
-			password: cfg.AdminPassword,
-			role:     auth.RoleAdmin,
-		},
-		{
-			username: "member",
-			email:    "member@delcom.org",
-			password: "member",
-			role:     auth.RoleMember,
-		},
+// seedUsers: akun dari .env, akun wajib modul (admin/admin), dan member/member.
+func seedUsers(cfg *config.Config) []seedUser {
+	users := []seedUser{
+		{cfg.AdminUsername, cfg.AdminUsername + "@delcom.org", cfg.AdminPassword, auth.RoleAdmin},
+		{"member", "member@delcom.org", "member", auth.RoleMember},
 	}
+	if cfg.AdminUsername != "admin" {
+		users = append(users, seedUser{"admin", "admin@delcom.org", "admin", auth.RoleAdmin})
+	}
+	return users
+}
 
-	for i, s := range seeds {
-		var user auth.User
-
-		err := db.Where("username = ?", s.username).First(&user).Error
-
-		if err == nil {
-			// Perbaiki role akun admin jika sebelumnya salah.
-			// Password akun yang sudah ada tidak diubah.
-			if i == 0 && user.Role != auth.RoleAdmin {
-				if err := db.Model(&user).
-					Update("role", auth.RoleAdmin).Error; err != nil {
-					return err
-				}
-			}
-
-			continue
+// schemaReady bernilai true bila tabel ada dan setiap akun bawaan sudah ada dengan role yang benar.
+func schemaReady(db *gorm.DB, cfg *config.Config) bool {
+	m := db.Migrator()
+	if !m.HasTable(&auth.User{}) || !m.HasTable(&post.Post{}) {
+		return false
+	}
+	for _, s := range seedUsers(cfg) {
+		var count int64
+		db.Model(&auth.User{}).Where("username = ? AND role = ?", s.username, s.role).Count(&count)
+		if count == 0 {
+			return false
 		}
+	}
+	return true
+}
 
-		if err != gorm.ErrRecordNotFound {
-			return err
-		}
+// EnsureSchema menjalankan Migrate + Seed hanya bila belum pernah dilakukan, sehingga
+// cold start serverless cepat dan beberapa instance paralel tidak saling bentrok.
+func EnsureSchema(db *gorm.DB, cfg *config.Config) error {
+	if schemaReady(db, cfg) {
+		return nil
+	}
+	if err := Migrate(db); err != nil {
+		return err
+	}
+	return Seed(db, cfg)
+}
 
-		hash, err := bcrypt.GenerateFromPassword(
-			[]byte(s.password),
-			bcrypt.DefaultCost,
-		)
+// Seed menyuntikkan akun admin (dari .env), member, dan dua artikel contoh bila belum ada.
+func Seed(db *gorm.DB, cfg *config.Config) error {
+	ids := map[string]uint{}
+	for _, s := range seedUsers(cfg) {
+		var existing auth.User
+		err := db.Where("username = ?", s.username).Limit(1).Find(&existing).Error
 		if err != nil {
 			return err
 		}
-
-		user = auth.User{
-			Username: s.username,
-			Email:    s.email,
-			Password: string(hash),
-			Role:     s.role,
+		if existing.ID != 0 {
+			// Pastikan role akun bawaan benar (mis. akun lama yang tercipta sebagai member).
+			if existing.Role != s.role {
+				if err := db.Model(&existing).Update("role", s.role).Error; err != nil {
+					return err
+				}
+			}
+			ids[s.username] = existing.ID
+			continue
 		}
-
+		hash, err := bcrypt.GenerateFromPassword([]byte(s.password), bcrypt.DefaultCost)
+		if err != nil {
+			return err
+		}
+		user := auth.User{Username: s.username, Email: s.email, Password: string(hash), Role: s.role}
 		if err := db.Create(&user).Error; err != nil {
 			return err
 		}
+		ids[s.username] = user.ID
 	}
+	return seedPosts(db, cfg, ids)
+}
 
+func seedPosts(db *gorm.DB, cfg *config.Config, ids map[string]uint) error {
+	var count int64
+	if err := db.Model(&post.Post{}).Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	now := time.Now()
+	samples := []post.Post{
+		{
+			UserID: ids["member"], Title: "Pengenalan Bahasa Pemrograman Golang Modern",
+			Slug: "pengenalan-bahasa-pemrograman-golang-modern", Category: "Teknologi",
+			Excerpt:     "Panduan memahami Golang dan Gin untuk membangun REST API yang cepat dan rapi.",
+			Content:     "# Belajar Golang\n\nGolang adalah bahasa pemrograman open source buatan Google yang dirancang untuk performa tinggi, efisiensi memori, dan konkurensi yang mudah lewat goroutine.\n\n## Mengapa Gin?\n\nGin adalah web framework ringan dengan router cepat, middleware, dan binding JSON yang praktis.\n\n## Penutup\n\nMulailah dari proyek kecil, tulis pengujian sejak awal, dan biarkan arsitektur tumbuh secara bertahap.",
+			IsPublished: true, PublishedAt: &now,
+		},
+		{
+			UserID: ids[cfg.AdminUsername], Title: "Penerapan AI dalam Kurikulum Pendidikan 2026",
+			Slug: "penerapan-ai-dalam-kurikulum-pendidikan-2026", Category: "Pendidikan",
+			Excerpt:     "Bagaimana kecerdasan buatan mengubah cara belajar dan mengajar di perguruan tinggi.",
+			Content:     "# Pendidikan Modern Berbasis AI\n\nKecerdasan buatan membantu proses belajar mengajar menjadi lebih interaktif dan adaptif.\n\n## Peluang\n\n- Umpan balik instan untuk mahasiswa\n- Materi yang menyesuaikan kecepatan belajar\n- Asisten penulisan dan penelitian\n\n## Tantangan\n\nIntegritas akademik dan literasi digital tetap menjadi fondasi yang harus dijaga.",
+			IsPublished: true, PublishedAt: &now,
+		},
+	}
+	for i := range samples {
+		if err := db.Create(&samples[i]).Error; err != nil {
+			return fmt.Errorf("seed artikel: %w", err)
+		}
+	}
 	return nil
 }

@@ -7,7 +7,7 @@ import (
 )
 
 func TestLoadDefaults(t *testing.T) {
-	for _, k := range []string{"APP_ENV", "APP_PORT", "DB_HOST", "OPENAI_MODEL"} {
+	for _, k := range []string{"APP_ENV", "PORT", "APP_PORT", "DB_HOST", "OPENAI_MODEL"} {
 		t.Setenv(k, "")
 	}
 	cfg := Load()
@@ -16,10 +16,16 @@ func TestLoadDefaults(t *testing.T) {
 	assert.Equal(t, "127.0.0.1", cfg.DBHost)
 	assert.Equal(t, "nama-model", cfg.OpenAIModel)
 	assert.Equal(t, ":8081", cfg.Addr())
-	assert.Equal(t, "blog.db", cfg.SQLitePath)
+}
+
+func TestPortOverridesAppPort(t *testing.T) {
+	t.Setenv("APP_PORT", "9999")
+	t.Setenv("PORT", "7777")
+	assert.Equal(t, ":7777", Load().Addr())
 }
 
 func TestLoadFromEnvironment(t *testing.T) {
+	t.Setenv("PORT", "")
 	t.Setenv("APP_PORT", "9999")
 	t.Setenv("DB_DATABASE", "mydb")
 	t.Setenv("DB_USERNAME", "u")
@@ -30,6 +36,6 @@ func TestLoadFromEnvironment(t *testing.T) {
 	cfg := Load()
 	assert.Equal(t, ":9999", cfg.Addr())
 	assert.Equal(t,
-		"host=db port=5433 user=u password=p dbname=mydb sslmode=require TimeZone=Asia/Jakarta connect_timeout=5",
+		"host=db port=5433 user=u password=p dbname=mydb sslmode=require TimeZone=Asia/Jakarta",
 		cfg.DSN())
 }

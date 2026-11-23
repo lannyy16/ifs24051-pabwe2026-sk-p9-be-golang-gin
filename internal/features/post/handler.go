@@ -35,7 +35,6 @@ func parseID(c *gin.Context) (uint, bool) {
 		response.Fail(c, 400, "ID tidak valid")
 		return 0, false
 	}
-
 	return uint(id), true
 }
 
@@ -51,7 +50,6 @@ func (h *Handler) PublicList(c *gin.Context) {
 		writeError(c, err)
 		return
 	}
-
 	response.Success(c, 200, "Artikel berhasil diambil", res)
 }
 
@@ -62,33 +60,28 @@ func (h *Handler) PublicDetail(c *gin.Context) {
 		writeError(c, err)
 		return
 	}
-
 	response.Success(c, 200, "Artikel berhasil diambil", res)
 }
 
 // List: GET /api/posts.
 func (h *Handler) List(c *gin.Context) {
 	u, _ := middleware.CurrentUser(c)
-
 	res, err := h.svc.ListMine(u.ID)
 	if err != nil {
 		writeError(c, err)
 		return
 	}
-
 	response.Success(c, 200, "Artikel berhasil diambil", res)
 }
 
 // Stats: GET /api/posts/stats.
 func (h *Handler) Stats(c *gin.Context) {
 	u, _ := middleware.CurrentUser(c)
-
 	res, err := h.svc.Stats(u.ID)
 	if err != nil {
 		writeError(c, err)
 		return
 	}
-
 	response.Success(c, 200, "Statistik berhasil diambil", res)
 }
 
@@ -98,35 +91,28 @@ func (h *Handler) Detail(c *gin.Context) {
 	if !ok {
 		return
 	}
-
 	u, _ := middleware.CurrentUser(c)
-
-	res, err := h.svc.Get(u.ID, id)
+	res, err := h.svc.Get(u.ID, u.Role, id)
 	if err != nil {
 		writeError(c, err)
 		return
 	}
-
 	response.Success(c, 200, "Artikel berhasil diambil", res)
 }
 
 // Create: POST /api/posts.
 func (h *Handler) Create(c *gin.Context) {
 	var req PostRequest
-
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, "Data artikel tidak valid: "+err.Error())
 		return
 	}
-
 	u, _ := middleware.CurrentUser(c)
-
 	res, err := h.svc.Create(u.ID, req)
 	if err != nil {
 		writeError(c, err)
 		return
 	}
-
 	response.Success(c, 201, "Artikel berhasil dibuat", res)
 }
 
@@ -136,27 +122,17 @@ func (h *Handler) Update(c *gin.Context) {
 	if !ok {
 		return
 	}
-
-	u, _ := middleware.CurrentUser(c)
-
-	// Periksa keberadaan dan kepemilikan artikel sebelum validasi body.
-	if _, err := h.svc.Get(u.ID, id); err != nil {
-		writeError(c, err)
-		return
-	}
-
-	var req PostRequest
+	var req UpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, "Data artikel tidak valid: "+err.Error())
 		return
 	}
-
-	res, err := h.svc.Update(u.ID, id, req)
+	u, _ := middleware.CurrentUser(c)
+	res, err := h.svc.Update(u.ID, u.Role, id, req)
 	if err != nil {
 		writeError(c, err)
 		return
 	}
-
 	response.Success(c, 200, "Artikel berhasil diperbarui", res)
 }
 
@@ -166,15 +142,12 @@ func (h *Handler) TogglePublish(c *gin.Context) {
 	if !ok {
 		return
 	}
-
 	u, _ := middleware.CurrentUser(c)
-
-	res, err := h.svc.TogglePublish(u.ID, id)
+	res, err := h.svc.TogglePublish(u.ID, u.Role, id)
 	if err != nil {
 		writeError(c, err)
 		return
 	}
-
 	response.Success(c, 200, "Status publikasi berhasil diubah", res)
 }
 
@@ -184,14 +157,11 @@ func (h *Handler) Delete(c *gin.Context) {
 	if !ok {
 		return
 	}
-
 	u, _ := middleware.CurrentUser(c)
-
-	if err := h.svc.Delete(u.ID, id); err != nil {
+	if err := h.svc.Delete(u.ID, u.Role, id); err != nil {
 		writeError(c, err)
 		return
 	}
-
 	response.Success(c, 200, "Artikel berhasil dihapus", nil)
 }
 
@@ -202,7 +172,6 @@ func (h *Handler) AdminUsers(c *gin.Context) {
 		writeError(c, err)
 		return
 	}
-
 	response.Success(c, 200, "Pengguna berhasil diambil", res)
 }
 
@@ -213,7 +182,6 @@ func (h *Handler) AdminPosts(c *gin.Context) {
 		writeError(c, err)
 		return
 	}
-
 	response.Success(c, 200, "Artikel berhasil diambil", res)
 }
 
@@ -223,12 +191,10 @@ func (h *Handler) AdminUserPosts(c *gin.Context) {
 	if !ok {
 		return
 	}
-
 	res, err := h.svc.AdminUserPosts(id)
 	if err != nil {
 		writeError(c, err)
 		return
 	}
-
 	response.Success(c, 200, "Artikel pengguna berhasil diambil", res)
 }
