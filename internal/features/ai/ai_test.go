@@ -236,15 +236,27 @@ func TestHandler(t *testing.T) {
 
 	code, _ = run(NewService(nil, &fakeChat{}), `{"topic":"x"}`)
 	assert.Equal(t, 400, code)
-	code, _ = run(NewService(nil, &fakeChat{}), `{"topic":"   "}`)
-	assert.Equal(t, 400, code)
 
-	code, out = run(NewService(nil, &fakeChat{err: errBoom}), `{"topic":"Golang"}`)
+	// Provider AI gagal => handler memberi draf template (200), bukan 502,
+	// sehingga fitur tetap dapat dipakai. Kategori kosong => "Umum".
+	code, out = run(NewService(nil, &fakeChat{err: errBoom}), `{"topic":" Golang "}`)
 	assert.Equal(t, 200, code)
 	assert.Equal(t, "success", out["status"])
-	assert.Equal(t, "Umum", out["data"].(map[string]any)["category"])
+	data := out["data"].(map[string]any)
+	assert.Equal(t, "Golang", data["title"])
+	assert.Equal(t, "Umum", data["category"])
+	assert.NotEmpty(t, data["excerpt"])
+	assert.Contains(t, data["content"], "# Golang")
+	assert.Equal(t, false, data["used_web_search"])
+	assert.Empty(t, data["sources"])
 
-	code, out = run(NewService(nil, &fakeChat{err: errBoom}), `{"topic":"Golang","category":"teknologi"}`)
+	// Kategori dari permintaan dipertahankan pada draf template.
+	code, out = run(NewService(nil, &fakeChat{err: errBoom}), `{"topic":"Golang","category":"Bisnis"}`)
 	assert.Equal(t, 200, code)
-	assert.Equal(t, "Teknologi", out["data"].(map[string]any)["category"])
+	assert.Equal(t, "Bisnis", out["data"].(map[string]any)["category"])
+
+	// Respons AI kosong juga memicu draf template.
+	code, out = run(NewService(nil, &fakeChat{out: "  "}), `{"topic":"Golang"}`)
+	assert.Equal(t, 200, code)
+	assert.NotEmpty(t, out["data"].(map[string]any)["content"])
 }

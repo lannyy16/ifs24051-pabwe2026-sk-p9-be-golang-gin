@@ -82,9 +82,8 @@ func TestToResponse(t *testing.T) {
 func TestRegisterLoginProfileFlow(t *testing.T) {
 	r := router(newDB(t))
 
-	code, out := call(r, "POST", "/register", "", gin.H{"username": "budi", "email": "Budi@Mail.com", "password": "rahasia123", "role": "admin"})
+	code, out := call(r, "POST", "/register", "", gin.H{"username": "budi", "email": "Budi@Mail.com", "password": "rahasia123"})
 	assert.Equal(t, 201, code)
-	assert.Equal(t, RoleMember, out["data"].(map[string]any)["user"].(map[string]any)["role"])
 	token := tokenOf(out)
 
 	// duplikat
@@ -245,4 +244,43 @@ func TestWriteErrorDefault(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
 	writeError(c, errBoom)
 	assert.Equal(t, 500, w.Code)
+}
+
+func TestReservedAdminSelfHealAndRegisterBlock(t *testing.T) {
+	db := newDB(t)
+	real := NewRepository(db)
+
+	// Data lama: akun "admin" ternyata tersimpan sebagai member.
+	_, err := NewService(real, secret).Register(RegisterRequest{Username: "admin", Email: "admin@delcom.org", Password: "admin1"})
+	require.NoError(t, err)
+	require.NoError(t, db.Model(&User{}).Where("username = ?", "admin").Update("role", RoleMember).Error)
+
+	svc := NewService(real, secret).WithAdmins(" Admin ", "", "boss")
+
+	// Login memulihkan role admin (di token maupun di basis data).
+	res, err := svc.Login(LoginRequest{Username: "admin", Password: "admin1"})
+	require.NoError(t, err)
+	assert.Equal(t, RoleAdmin, res.User.Role)
+	var stored User
+	require.NoError(t, db.Where("username = ?", "admin").First(&stored).Error)
+	assert.Equal(t, RoleAdmin, stored.Role)
+
+	// Sudah admin: login berikutnya tidak perlu menulis ulang.
+	res, err = NewService(&fakeRepo{Repository: real, failUpdate: true}, secret).WithAdmins("admin").Login(LoginRequest{Username: "admin", Password: "admin1"})
+	require.NoError(t, err)
+	assert.Equal(t, RoleAdmin, res.User.Role)
+
+	// Username cadangan tidak bisa didaftarkan (huruf besar/kecil tidak berpengaruh).
+	_, err = svc.Register(RegisterRequest{Username: "ADMIN", Email: "x1@x.id", Password: "123456"})
+	assert.ErrorIs(t, err, ErrUsernameTaken)
+	_, err = svc.Register(RegisterRequest{Username: "boss", Email: "x2@x.id", Password: "123456"})
+	assert.ErrorIs(t, err, ErrUsernameTaken)
+	res, err = svc.Register(RegisterRequest{Username: "biasa", Email: "x3@x.id", Password: "123456"})
+	require.NoError(t, err)
+	assert.Equal(t, RoleMember, res.User.Role)
+
+	// Gagal menyimpan pemulihan role => error diteruskan.
+	require.NoError(t, db.Model(&User{}).Where("username = ?", "admin").Update("role", RoleMember).Error)
+	_, err = NewService(&fakeRepo{Repository: real, failUpdate: true}, secret).WithAdmins("admin").Login(LoginRequest{Username: "admin", Password: "admin1"})
+	assert.ErrorIs(t, err, errBoom)
 }

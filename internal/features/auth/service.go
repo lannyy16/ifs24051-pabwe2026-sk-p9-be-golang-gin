@@ -28,6 +28,7 @@ type Service struct {
 	repo   Repository
 	secret string
 	ttl    time.Duration
+	admins map[string]bool // username akun admin bawaan (huruf kecil)
 }
 
 // NewService membuat Service dengan secret JWT (APP_KEY).
@@ -35,11 +36,32 @@ func NewService(repo Repository, secret string) *Service {
 	return &Service{repo: repo, secret: secret, ttl: 24 * time.Hour}
 }
 
+// WithAdmins menandai username akun admin bawaan (mis. "admin" dan ADMIN_USERNAME).
+// Username ini dicadangkan: tidak dapat didaftarkan lewat Register, dan bila akun
+// bawaan ternyata tersimpan dengan role selain admin (data lama), role-nya otomatis
+// dipulihkan saat login sehingga endpoint /api/admin/* tidak menolak admin (403).
+func (s *Service) WithAdmins(usernames ...string) *Service {
+	s.admins = map[string]bool{}
+	for _, u := range usernames {
+		if u = strings.ToLower(strings.TrimSpace(u)); u != "" {
+			s.admins[u] = true
+		}
+	}
+	return s
+}
+
+func (s *Service) isReservedAdmin(username string) bool {
+	return s.admins[strings.ToLower(strings.TrimSpace(username))]
+}
+
 // Register mendaftarkan penulis baru (role member) dan langsung menerbitkan token.
 func (s *Service) Register(req RegisterRequest) (*AuthResponse, error) {
 	username := strings.TrimSpace(req.Username)
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 
+	if s.isReservedAdmin(username) {
+		return nil, ErrUsernameTaken
+	}
 	taken, err := s.repo.UsernameExists(username, 0)
 	if err != nil {
 		return nil, err
@@ -76,6 +98,12 @@ func (s *Service) Login(req LoginRequest) (*AuthResponse, error) {
 	}
 	if bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)) != nil {
 		return nil, ErrInvalidCredentials
+	}
+	if s.isReservedAdmin(user.Username) && user.Role != RoleAdmin {
+		user.Role = RoleAdmin
+		if err := s.repo.Update(user); err != nil {
+			return nil, err
+		}
 	}
 	return s.authResponse(user)
 }

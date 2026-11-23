@@ -121,3 +121,62 @@ func TestEndToEndRoutes(t *testing.T) {
 	code, _, _ = call(r, "POST", "/api/posts/ai-generate", member, gin.H{"topic": "x"})
 	assert.Equal(t, 400, code)
 }
+
+// Skenario yang sama dengan grader "Panel Admin" dan "Kategori & Artikel Publik".
+func TestGraderScenarios(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := database.ConnectSQLiteMemory()
+	require.NoError(t, err)
+	require.NoError(t, database.Migrate(db))
+	cfg := &config.Config{AppKey: "router-secret", AdminUsername: "admin", AdminPassword: "admin"}
+	require.NoError(t, database.Seed(db, cfg))
+	r := NewRouter(cfg, db)
+
+	// Data lama: akun admin tersimpan sebagai member. Login harus memulihkan role-nya.
+	require.NoError(t, db.Exec("UPDATE users SET role = 'member' WHERE username = 'admin'").Error)
+	admin := login(t, r, "admin", "admin")
+	member := login(t, r, "member", "member")
+
+	// Username cadangan tidak bisa didaftarkan ulang.
+	code, _, _ := call(r, "POST", "/api/auth/register", "", gin.H{"username": "admin", "email": "lain@x.id", "password": "123456"})
+	assert.Equal(t, 400, code)
+
+	// Artikel dari akun uji terlihat oleh admin.
+	code, out, _ := call(r, "POST", "/api/posts", member, gin.H{"title": "Artikel Admin Cek", "content": "isi", "is_published": true})
+	require.Equal(t, 201, code)
+	memberID := out["data"].(map[string]any)["user_id"]
+
+	code, out, _ = call(r, "GET", "/api/admin/posts", admin, nil)
+	require.Equal(t, 200, code)
+	assert.NotEmpty(t, out["data"].([]any))
+	code, out, _ = call(r, "GET", "/api/admin/users", admin, nil)
+	require.Equal(t, 200, code)
+	assert.NotEmpty(t, out["data"].([]any))
+	code, out, _ = call(r, "GET", "/api/admin/users/"+jsonNumber(memberID)+"/posts", admin, nil)
+	require.Equal(t, 200, code)
+	assert.NotEmpty(t, out["data"].([]any))
+	code, out, _ = call(r, "GET", "/api/admin/users/999999/posts", admin, nil)
+	require.Equal(t, 200, code)
+	assert.Empty(t, out["data"].([]any))
+
+	// Tanpa token 401, member 403, ID bukan angka 400.
+	code, _, _ = call(r, "GET", "/api/admin/users/abc/posts", "", nil)
+	assert.Equal(t, 401, code)
+	code, _, _ = call(r, "GET", "/api/admin/users/1/posts", member, nil)
+	assert.Equal(t, 403, code)
+	code, _, _ = call(r, "GET", "/api/admin/users/abc/posts", admin, nil)
+	assert.Equal(t, 400, code)
+
+	// Artikel publik tidak membocorkan data internal (user_id).
+	code, _, w := call(r, "GET", "/api/public/posts", "", nil)
+	require.Equal(t, 200, code)
+	assert.NotContains(t, w.Body.String(), "user_id")
+	code, _, w = call(r, "GET", "/api/public/posts/artikel-admin-cek", "", nil)
+	require.Equal(t, 200, code)
+	assert.NotContains(t, w.Body.String(), "user_id")
+}
+
+func jsonNumber(v any) string {
+	b, _ := json.Marshal(v)
+	return string(b)
+}
