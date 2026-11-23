@@ -70,18 +70,16 @@ func seedUsers(cfg *config.Config) []seedUser {
 	return users
 }
 
-// schemaReady bernilai true bila tabel ada dan setiap akun bawaan sudah ada dengan role dan password yang benar.
+// schemaReady bernilai true bila tabel ada dan setiap akun bawaan sudah ada dengan role yang benar.
 func schemaReady(db *gorm.DB, cfg *config.Config) bool {
 	m := db.Migrator()
 	if !m.HasTable(&auth.User{}) || !m.HasTable(&post.Post{}) {
 		return false
 	}
 	for _, s := range seedUsers(cfg) {
-		var u auth.User
-		if err := db.Where("username = ?", s.username).Limit(1).Find(&u).Error; err != nil || u.ID == 0 {
-			return false
-		}
-		if u.Role != s.role || bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(s.password)) != nil {
+		var count int64
+		db.Model(&auth.User{}).Where("username = ? AND role = ?", s.username, s.role).Count(&count)
+		if count == 0 {
 			return false
 		}
 	}
@@ -110,18 +108,9 @@ func Seed(db *gorm.DB, cfg *config.Config) error {
 			return err
 		}
 		if existing.ID != 0 {
-			// Pastikan role dan password akun bawaan selalu sesuai konfigurasi/modul.
-			updates := map[string]any{}
+			// Pastikan role akun bawaan benar (mis. akun lama yang tercipta sebagai member).
 			if existing.Role != s.role {
-				updates["role"] = s.role
-			}
-			if bcrypt.CompareHashAndPassword([]byte(existing.Password), []byte(s.password)) != nil {
-				if hash, err := bcrypt.GenerateFromPassword([]byte(s.password), bcrypt.DefaultCost); err == nil {
-					updates["password"] = string(hash)
-				}
-			}
-			if len(updates) > 0 {
-				if err := db.Model(&existing).Updates(updates).Error; err != nil {
+				if err := db.Model(&existing).Update("role", s.role).Error; err != nil {
 					return err
 				}
 			}

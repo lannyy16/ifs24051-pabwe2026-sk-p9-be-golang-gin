@@ -239,6 +239,9 @@ func TestAuthorFlowAndPublicEndpoints(t *testing.T) {
 	code, out = call(r, "GET", "/public/posts", "", nil)
 	assert.Equal(t, 200, code)
 	assert.Len(t, dataList(out), 1)
+	rawPub, _ := json.Marshal(out["data"])
+	assert.NotContains(t, strings.ToLower(string(rawPub)), "user_id")
+	assert.NotContains(t, strings.ToLower(string(rawPub)), "password")
 	code, out = call(r, "GET", "/public/posts?q=KONTEN&category=Bisnis", "", nil)
 	assert.Equal(t, 200, code)
 	assert.Len(t, dataList(out), 1)
@@ -248,6 +251,8 @@ func TestAuthorFlowAndPublicEndpoints(t *testing.T) {
 	code, out = call(r, "GET", "/public/posts/judul-baru", "", nil)
 	assert.Equal(t, 200, code)
 	assert.Equal(t, "Judul Baru", dataMap(out)["title"])
+	rawPubDetail, _ := json.Marshal(out["data"])
+	assert.NotContains(t, strings.ToLower(string(rawPubDetail)), "user_id")
 	code, _ = call(r, "GET", "/public/posts/belajar-golang-gin-2", "", nil)
 	assert.Equal(t, 404, code)
 

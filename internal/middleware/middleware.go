@@ -86,7 +86,7 @@ func RequireRole(roles ...string) gin.HandlerFunc {
 			return
 		}
 		for _, r := range roles {
-			if strings.EqualFold(u.Role, r) || (strings.EqualFold(r, "admin") && strings.HasPrefix(strings.ToLower(u.Username), "admin")) {
+			if strings.EqualFold(u.Role, r) {
 				c.Next()
 				return
 			}

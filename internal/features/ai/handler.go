@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"app/internal/features/post"
 	"app/internal/response"
 )
 
@@ -18,7 +19,7 @@ func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 // Generate menghasilkan draf artikel dengan AI.
 func (h *Handler) Generate(c *gin.Context) {
 	var req GenerateRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil || len(strings.TrimSpace(req.Topic)) < 3 {
 		response.Fail(c, 400, "Field topic wajib diisi (minimal 3 karakter)")
 		return
 	}
@@ -28,12 +29,8 @@ func (h *Handler) Generate(c *gin.Context) {
 		// dikonfigurasi atau sedang tidak tersedia. Ini draf template, bukan
 		// hasil generasi model eksternal.
 		topic := strings.TrimSpace(req.Topic)
-		category := req.Category
-		if category == "" {
-			category = "Umum"
-		}
 		res = &GenerateResponse{
-			Title: topic, Category: category,
+			Title: topic, Category: post.ResolveCategory(req.Category),
 			Excerpt: fmt.Sprintf("Artikel pengantar mengenai %s.", topic),
 			Content: fmt.Sprintf("# %s\n\n## Pendahuluan\n\n%s merupakan topik yang dapat dibahas dari berbagai sudut pandang.\n\n## Pembahasan\n\nJelaskan konsep utama, manfaat, tantangan, serta contoh penerapan %s berdasarkan referensi yang tepercaya.\n\n## Kesimpulan\n\nRangkum poin-poin penting dan sertakan sumber yang relevan sebelum menerbitkan artikel ini.", topic, topic, topic),
 			Sources: []Source{}, UsedWebSearch: false,
