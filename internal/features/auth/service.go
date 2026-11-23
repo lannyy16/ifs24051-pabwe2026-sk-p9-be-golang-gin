@@ -89,7 +89,11 @@ func (s *Service) Register(req RegisterRequest) (*AuthResponse, error) {
 
 // Login memverifikasi kredensial dan menerbitkan token JWT.
 func (s *Service) Login(req LoginRequest) (*AuthResponse, error) {
-	user, err := s.repo.FindByIdentity(strings.TrimSpace(req.Username))
+	identity := strings.TrimSpace(req.Username)
+	if identity == "" {
+		identity = strings.TrimSpace(req.Email)
+	}
+	user, err := s.repo.FindByIdentity(identity)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrInvalidCredentials
 	}
@@ -99,7 +103,7 @@ func (s *Service) Login(req LoginRequest) (*AuthResponse, error) {
 	if bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)) != nil {
 		return nil, ErrInvalidCredentials
 	}
-	if s.isReservedAdmin(user.Username) && user.Role != RoleAdmin {
+	if (s.isReservedAdmin(user.Username) || s.isReservedAdmin(user.Email)) && user.Role != RoleAdmin {
 		user.Role = RoleAdmin
 		if err := s.repo.Update(user); err != nil {
 			return nil, err
@@ -125,6 +129,9 @@ func (s *Service) UpdateProfile(id uint, req UpdateProfileRequest) (*UserRespons
 		return nil, err
 	}
 	if username := strings.TrimSpace(req.Username); username != "" && username != user.Username {
+		if s.isReservedAdmin(username) && !strings.EqualFold(user.Role, RoleAdmin) {
+			return nil, ErrUsernameTaken
+		}
 		taken, err := s.repo.UsernameExists(username, id)
 		if err != nil {
 			return nil, err

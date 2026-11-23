@@ -50,7 +50,7 @@ func Load() *Config {
 
 		SearchEngineEndpoint: get("SEARCH_ENGINE_ENDPOINT", "https://delcom.org/api/v1/search"),
 		OpenAIEndpoint:       get("OPENAI_ENDPOINT", "https://delcom.org/api/v1"),
-		OpenAIKey:            get("OPENAI_KEY", "key"),
+		OpenAIKey:            get("OPENAI_KEY", get("OPENAI_API_KEY", "key")),
 		OpenAIModel:          get("OPENAI_MODEL", "nama-model"),
 	}
 }

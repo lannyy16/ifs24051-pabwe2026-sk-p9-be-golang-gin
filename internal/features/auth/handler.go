@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -37,6 +38,15 @@ func (h *Handler) Login(c *gin.Context) {
 		response.Fail(c, 400, "Username dan password wajib diisi")
 		return
 	}
+	identity := strings.TrimSpace(req.Username)
+	if identity == "" {
+		identity = strings.TrimSpace(req.Email)
+	}
+	if identity == "" {
+		response.Fail(c, 400, "Username dan password wajib diisi")
+		return
+	}
+	req.Username = identity
 	res, err := h.svc.Login(req)
 	if err != nil {
 		writeError(c, err)

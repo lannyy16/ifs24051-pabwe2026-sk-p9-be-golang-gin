@@ -28,7 +28,8 @@ type RegisterRequest struct {
 
 // LoginRequest adalah payload login (username atau email).
 type LoginRequest struct {
-	Username string `json:"username" binding:"required"`
+	Username string `json:"username"`
+	Email    string `json:"email"`
 	Password string `json:"password" binding:"required"`
 }
 

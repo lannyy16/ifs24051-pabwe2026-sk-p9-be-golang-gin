@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"app/internal/features/post"
 	"app/internal/response"
 )
 
@@ -22,16 +23,17 @@ func (h *Handler) Generate(c *gin.Context) {
 		response.Fail(c, 400, "Field topic wajib diisi (minimal 3 karakter)")
 		return
 	}
+	topic := strings.TrimSpace(req.Topic)
+	if len([]rune(topic)) < 3 {
+		response.Fail(c, 400, "Field topic wajib diisi (minimal 3 karakter)")
+		return
+	}
 	res, err := h.svc.Generate(c.Request.Context(), req)
 	if err != nil {
 		// Fallback agar fitur tetap dapat digunakan ketika provider AI tidak
 		// dikonfigurasi atau sedang tidak tersedia. Ini draf template, bukan
 		// hasil generasi model eksternal.
-		topic := strings.TrimSpace(req.Topic)
-		category := req.Category
-		if category == "" {
-			category = "Umum"
-		}
+		category := post.ResolveCategory(req.Category)
 		res = &GenerateResponse{
 			Title: topic, Category: category,
 			Excerpt: fmt.Sprintf("Artikel pengantar mengenai %s.", topic),

@@ -95,12 +95,18 @@ func TestRegisterLoginProfileFlow(t *testing.T) {
 	code, _ = call(r, "POST", "/register", "", gin.H{"username": "b"})
 	assert.Equal(t, 400, code)
 
-	// login dengan username & email
+	// login dengan username, email (case-insensitive), dan field email
 	code, out = call(r, "POST", "/login", "", gin.H{"username": "budi", "password": "rahasia123"})
 	assert.Equal(t, 200, code)
 	assert.NotEmpty(t, tokenOf(out))
+	code, _ = call(r, "POST", "/login", "", gin.H{"username": "BUDI", "password": "rahasia123"})
+	assert.Equal(t, 200, code)
 	code, _ = call(r, "POST", "/login", "", gin.H{"username": "budi@mail.com", "password": "rahasia123"})
 	assert.Equal(t, 200, code)
+	code, _ = call(r, "POST", "/login", "", gin.H{"email": "BUDI@MAIL.COM", "password": "rahasia123"})
+	assert.Equal(t, 200, code)
+	code, _ = call(r, "POST", "/login", "", gin.H{"password": "rahasia123"})
+	assert.Equal(t, 400, code)
 	code, _ = call(r, "POST", "/login", "", gin.H{"username": "budi", "password": "salah"})
 	assert.Equal(t, 401, code)
 	code, _ = call(r, "POST", "/login", "", gin.H{"username": "tidakada", "password": "x"})
@@ -281,6 +287,10 @@ func TestReservedAdminSelfHealAndRegisterBlock(t *testing.T) {
 
 	// Gagal menyimpan pemulihan role => error diteruskan.
 	require.NoError(t, db.Model(&User{}).Where("username = ?", "admin").Update("role", RoleMember).Error)
-	_, err = NewService(&fakeRepo{Repository: real, failUpdate: true}, secret).WithAdmins("admin").Login(LoginRequest{Username: "admin", Password: "admin1"})
+	_, err = NewService(&fakeRepo{Repository: real, failUpdate: true}, secret).WithAdmins("admin").Login(LoginRequest{Email: "admin@delcom.org", Password: "admin1"})
 	assert.ErrorIs(t, err, errBoom)
+
+	// Member tidak boleh mengganti username-nya ke username admin cadangan.
+	_, err = svc.UpdateProfile(res.User.ID, UpdateProfileRequest{Username: "boss"})
+	assert.ErrorIs(t, err, ErrUsernameTaken)
 }

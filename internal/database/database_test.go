@@ -162,4 +162,24 @@ func TestSeedErrors(t *testing.T) {
 	require.NoError(t, Migrate(db))
 	require.NoError(t, db.Create(&auth.User{Username: "orang", Email: "admin@delcom.org", Password: "x", Role: "member"}).Error)
 	assert.Error(t, Seed(db, &config.Config{AdminUsername: "admin", AdminPassword: "admin"}))
+
+	// AdminUsername kosong memakai default "admin", dan AdminUsername berbentuk email tidak digandakan domainnya.
+	db = memDB(t)
+	require.NoError(t, EnsureSchema(db, &config.Config{AdminUsername: "", AdminPassword: "admin"}))
+	assert.True(t, schemaReady(db, &config.Config{AdminUsername: "", AdminPassword: "admin"}))
+
+	db = memDB(t)
+	require.NoError(t, EnsureSchema(db, &config.Config{AdminUsername: "boss@custom.id", AdminPassword: "secret"}))
+	var boss auth.User
+	require.NoError(t, db.Where("username = ?", "boss@custom.id").First(&boss).Error)
+	assert.Equal(t, "boss@custom.id", boss.Email)
+	assert.Equal(t, auth.RoleAdmin, boss.Role)
+
+	// Password admin di DB berbeda dari konfigurasi => schemaReady false, EnsureSchema menyinkronkan password.
+	assert.False(t, schemaReady(db, &config.Config{AdminUsername: "boss@custom.id", AdminPassword: "newpass"}))
+	require.NoError(t, EnsureSchema(db, &config.Config{AdminUsername: "boss@custom.id", AdminPassword: "newpass"}))
+	assert.True(t, schemaReady(db, &config.Config{AdminUsername: "boss@custom.id", AdminPassword: "newpass"}))
+
+	// Kegagalan bcrypt saat memperbarui password admin yang sudah ada (> 72 byte).
+	assert.Error(t, Seed(db, &config.Config{AdminUsername: "boss@custom.id", AdminPassword: strings.Repeat("x", 100)}))
 }

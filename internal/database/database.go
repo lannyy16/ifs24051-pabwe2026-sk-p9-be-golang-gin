@@ -3,6 +3,7 @@ package database
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/glebarez/sqlite"
@@ -60,26 +61,38 @@ type seedUser struct {
 
 // seedUsers: akun dari .env, akun wajib modul (admin/admin), dan member/member.
 func seedUsers(cfg *config.Config) []seedUser {
+	adminUser := strings.TrimSpace(cfg.AdminUsername)
+	if adminUser == "" {
+		adminUser = "admin"
+	}
+	adminEmail := strings.ToLower(adminUser)
+	if !strings.Contains(adminEmail, "@") {
+		adminEmail += "@delcom.org"
+	}
 	users := []seedUser{
-		{cfg.AdminUsername, cfg.AdminUsername + "@delcom.org", cfg.AdminPassword, auth.RoleAdmin},
+		{adminUser, adminEmail, cfg.AdminPassword, auth.RoleAdmin},
 		{"member", "member@delcom.org", "member", auth.RoleMember},
 	}
-	if cfg.AdminUsername != "admin" {
+	if !strings.EqualFold(adminUser, "admin") {
 		users = append(users, seedUser{"admin", "admin@delcom.org", "admin", auth.RoleAdmin})
 	}
 	return users
 }
 
-// schemaReady bernilai true bila tabel ada dan setiap akun bawaan sudah ada dengan role yang benar.
+// schemaReady bernilai true bila tabel ada dan setiap akun bawaan sudah ada dengan role
+// (serta password untuk akun admin) yang sesuai.
 func schemaReady(db *gorm.DB, cfg *config.Config) bool {
 	m := db.Migrator()
 	if !m.HasTable(&auth.User{}) || !m.HasTable(&post.Post{}) {
 		return false
 	}
 	for _, s := range seedUsers(cfg) {
-		var count int64
-		db.Model(&auth.User{}).Where("username = ? AND role = ?", s.username, s.role).Count(&count)
-		if count == 0 {
+		var u auth.User
+		err := db.Where("LOWER(username) = LOWER(?)", s.username).Order("id").Limit(1).Find(&u).Error
+		if err != nil || u.ID == 0 || !strings.EqualFold(u.Role, s.role) {
+			return false
+		}
+		if s.role == auth.RoleAdmin && bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(s.password)) != nil {
 			return false
 		}
 	}
@@ -103,14 +116,25 @@ func Seed(db *gorm.DB, cfg *config.Config) error {
 	ids := map[string]uint{}
 	for _, s := range seedUsers(cfg) {
 		var existing auth.User
-		err := db.Where("username = ?", s.username).Limit(1).Find(&existing).Error
+		err := db.Where("LOWER(username) = LOWER(?)", s.username).Order("id").Limit(1).Find(&existing).Error
 		if err != nil {
 			return err
 		}
 		if existing.ID != 0 {
-			// Pastikan role akun bawaan benar (mis. akun lama yang tercipta sebagai member).
+			// Pastikan role (dan password untuk admin) akun bawaan selalu sesuai konfigurasi.
+			updates := map[string]any{}
 			if existing.Role != s.role {
-				if err := db.Model(&existing).Update("role", s.role).Error; err != nil {
+				updates["role"] = s.role
+			}
+			if s.role == auth.RoleAdmin && bcrypt.CompareHashAndPassword([]byte(existing.Password), []byte(s.password)) != nil {
+				hash, err := bcrypt.GenerateFromPassword([]byte(s.password), bcrypt.DefaultCost)
+				if err != nil {
+					return err
+				}
+				updates["password"] = string(hash)
+			}
+			if len(updates) > 0 {
+				if err := db.Model(&existing).Updates(updates).Error; err != nil {
 					return err
 				}
 			}
@@ -138,6 +162,10 @@ func seedPosts(db *gorm.DB, cfg *config.Config, ids map[string]uint) error {
 	if count > 0 {
 		return nil
 	}
+	adminID := ids[strings.TrimSpace(cfg.AdminUsername)]
+	if adminID == 0 {
+		adminID = ids["admin"]
+	}
 	now := time.Now()
 	samples := []post.Post{
 		{
@@ -148,7 +176,7 @@ func seedPosts(db *gorm.DB, cfg *config.Config, ids map[string]uint) error {
 			IsPublished: true, PublishedAt: &now,
 		},
 		{
-			UserID: ids[cfg.AdminUsername], Title: "Penerapan AI dalam Kurikulum Pendidikan 2026",
+			UserID: adminID, Title: "Penerapan AI dalam Kurikulum Pendidikan 2026",
 			Slug: "penerapan-ai-dalam-kurikulum-pendidikan-2026", Category: "Pendidikan",
 			Excerpt:     "Bagaimana kecerdasan buatan mengubah cara belajar dan mengajar di perguruan tinggi.",
 			Content:     "# Pendidikan Modern Berbasis AI\n\nKecerdasan buatan membantu proses belajar mengajar menjadi lebih interaktif dan adaptif.\n\n## Peluang\n\n- Umpan balik instan untuk mahasiswa\n- Materi yang menyesuaikan kecepatan belajar\n- Asisten penulisan dan penelitian\n\n## Tantangan\n\nIntegritas akademik dan literasi digital tetap menjadi fondasi yang harus dijaga.",

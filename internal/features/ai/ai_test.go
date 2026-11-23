@@ -84,6 +84,11 @@ func TestGenerateFallsBackToPlainMarkdown(t *testing.T) {
 		assert.Equal(t, out, res.Content)
 		assert.Equal(t, "Bisnis", res.Category)
 	}
+
+	// JSON tanpa excerpt otomatis diberi excerpt agar tidak kosong.
+	res, err := NewService(nil, &fakeChat{out: `{"title":"Judul Saja","content":"# Isi"}`}).Generate(context.Background(), GenerateRequest{Topic: "Golang"})
+	require.NoError(t, err)
+	assert.Equal(t, "Artikel ulasan tentang Judul Saja.", res.Excerpt)
 }
 
 func TestExtractJSON(t *testing.T) {
@@ -236,6 +241,8 @@ func TestHandler(t *testing.T) {
 
 	code, _ = run(NewService(nil, &fakeChat{}), `{"topic":"x"}`)
 	assert.Equal(t, 400, code)
+	code, _ = run(NewService(nil, &fakeChat{}), `{"topic":"   "}`)
+	assert.Equal(t, 400, code)
 
 	// Provider AI gagal => handler memberi draf template (200), bukan 502,
 	// sehingga fitur tetap dapat dipakai. Kategori kosong => "Umum".
@@ -250,8 +257,8 @@ func TestHandler(t *testing.T) {
 	assert.Equal(t, false, data["used_web_search"])
 	assert.Empty(t, data["sources"])
 
-	// Kategori dari permintaan dipertahankan pada draf template.
-	code, out = run(NewService(nil, &fakeChat{err: errBoom}), `{"topic":"Golang","category":"Bisnis"}`)
+	// Kategori dari permintaan dinormalisasi pada draf template.
+	code, out = run(NewService(nil, &fakeChat{err: errBoom}), `{"topic":"Golang","category":"bisnis"}`)
 	assert.Equal(t, 200, code)
 	assert.Equal(t, "Bisnis", out["data"].(map[string]any)["category"])
 

@@ -7,15 +7,20 @@ import (
 )
 
 func TestLoadDefaults(t *testing.T) {
-	for _, k := range []string{"APP_ENV", "PORT", "APP_PORT", "DB_HOST", "OPENAI_MODEL"} {
+	for _, k := range []string{"APP_ENV", "PORT", "APP_PORT", "DB_HOST", "OPENAI_KEY", "OPENAI_API_KEY", "OPENAI_MODEL"} {
 		t.Setenv(k, "")
 	}
 	cfg := Load()
 	assert.Equal(t, "development", cfg.AppEnv)
 	assert.Equal(t, "8081", cfg.AppPort)
 	assert.Equal(t, "127.0.0.1", cfg.DBHost)
+	assert.Equal(t, "key", cfg.OpenAIKey)
 	assert.Equal(t, "nama-model", cfg.OpenAIModel)
 	assert.Equal(t, ":8081", cfg.Addr())
+
+	// OPENAI_API_KEY dipakai bila OPENAI_KEY tidak diset.
+	t.Setenv("OPENAI_API_KEY", "sk-fallback")
+	assert.Equal(t, "sk-fallback", Load().OpenAIKey)
 }
 
 func TestPortOverridesAppPort(t *testing.T) {

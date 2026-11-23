@@ -3,6 +3,7 @@ package server
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -24,7 +25,11 @@ func NewRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery(), middleware.CORS())
 
-	authH := auth.NewHandler(auth.NewService(auth.NewRepository(db), cfg.AppKey).WithAdmins(cfg.AdminUsername, "admin"))
+	adminIdentities := []string{cfg.AdminUsername, "admin", "admin@delcom.org"}
+	if u := strings.TrimSpace(cfg.AdminUsername); u != "" && !strings.Contains(u, "@") {
+		adminIdentities = append(adminIdentities, strings.ToLower(u)+"@delcom.org")
+	}
+	authH := auth.NewHandler(auth.NewService(auth.NewRepository(db), cfg.AppKey).WithAdmins(adminIdentities...))
 	postH := post.NewHandler(post.NewService(post.NewRepository(db)))
 	aiH := ai.NewHandler(ai.NewService(
 		ai.NewSearchClient(cfg.SearchEngineEndpoint, ""),

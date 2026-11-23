@@ -61,8 +61,8 @@ func (r *gormRepository) ListPublished(q, category string) ([]Post, error) {
 		like := "%" + q + "%"
 		tx = tx.Where("(LOWER(title) LIKE ? OR LOWER(excerpt) LIKE ? OR LOWER(content) LIKE ?)", like, like, like)
 	}
-	if category != "" {
-		tx = tx.Where("category = ?", category)
+	if category = strings.TrimSpace(category); category != "" {
+		tx = tx.Where("LOWER(category) = LOWER(?)", category)
 	}
 	var posts []Post
 	err := tx.Order("published_at DESC, id DESC").Find(&posts).Error

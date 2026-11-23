@@ -1,6 +1,10 @@
 package auth
 
-import "gorm.io/gorm"
+import (
+	"strings"
+
+	"gorm.io/gorm"
+)
 
 // Repository mengabstraksi akses data pengguna.
 type Repository interface {
@@ -30,21 +34,35 @@ func (r *gormRepository) FindByID(id uint) (*User, error) {
 }
 
 func (r *gormRepository) FindByIdentity(identity string) (*User, error) {
-	var u User
-	if err := r.db.Where("username = ? OR email = ?", identity, identity).First(&u).Error; err != nil {
+	var users []User
+	if err := r.db.Where("LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)", identity, identity).Order("id").Find(&users).Error; err != nil {
 		return nil, err
 	}
-	return &u, nil
+	if len(users) == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	for i := range users {
+		if users[i].Username == identity {
+			return &users[i], nil
+		}
+	}
+	lower := strings.ToLower(identity)
+	for i := range users {
+		if strings.ToLower(users[i].Email) == lower {
+			return &users[i], nil
+		}
+	}
+	return &users[0], nil
 }
 
 func (r *gormRepository) UsernameExists(username string, excludeID uint) (bool, error) {
 	var n int64
-	err := r.db.Model(&User{}).Where("username = ? AND id <> ?", username, excludeID).Count(&n).Error
+	err := r.db.Model(&User{}).Where("LOWER(username) = LOWER(?) AND id <> ?", username, excludeID).Count(&n).Error
 	return n > 0, err
 }
 
 func (r *gormRepository) EmailExists(email string, excludeID uint) (bool, error) {
 	var n int64
-	err := r.db.Model(&User{}).Where("email = ? AND id <> ?", email, excludeID).Count(&n).Error
+	err := r.db.Model(&User{}).Where("LOWER(email) = LOWER(?) AND id <> ?", email, excludeID).Count(&n).Error
 	return n > 0, err
 }

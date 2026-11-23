@@ -139,7 +139,7 @@ func (s *Service) owned(userID uint, role string, id uint) (*Post, error) {
 	if err != nil {
 		return nil, err
 	}
-	if p.UserID != userID && !strings.EqualFold(role, "admin") {
+	if p.UserID != userID && !strings.EqualFold(strings.TrimSpace(role), "admin") {
 		return nil, ErrForbidden
 	}
 	return p, nil

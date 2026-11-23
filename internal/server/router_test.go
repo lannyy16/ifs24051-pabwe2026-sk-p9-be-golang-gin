@@ -174,6 +174,15 @@ func TestGraderScenarios(t *testing.T) {
 	code, _, w = call(r, "GET", "/api/public/posts/artikel-admin-cek", "", nil)
 	require.Equal(t, 200, code)
 	assert.NotContains(t, w.Body.String(), "user_id")
+
+	// AI generate mengembalikan 200 dengan title/excerpt/content walau endpoint OpenAI tidak aktif.
+	code, out, _ = call(r, "POST", "/api/posts/ai-generate", member, gin.H{"topic": "Belajar Golang Modern", "category": "teknologi"})
+	require.Equal(t, 200, code)
+	aiData := out["data"].(map[string]any)
+	assert.NotEmpty(t, aiData["title"])
+	assert.NotEmpty(t, aiData["excerpt"])
+	assert.NotEmpty(t, aiData["content"])
+	assert.Equal(t, "Teknologi", aiData["category"])
 }
 
 func jsonNumber(v any) string {

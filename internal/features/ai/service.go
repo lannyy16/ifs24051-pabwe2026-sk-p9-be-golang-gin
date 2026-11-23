@@ -86,6 +86,9 @@ func parseArticle(raw string, req GenerateRequest) article {
 	}
 	art.Title = strings.TrimSpace(art.Title)
 	art.Excerpt = strings.TrimSpace(art.Excerpt)
+	if art.Excerpt == "" {
+		art.Excerpt = fmt.Sprintf("Artikel ulasan tentang %s.", art.Title)
+	}
 	return art
 }
 

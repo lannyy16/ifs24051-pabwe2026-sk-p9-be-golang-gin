@@ -235,11 +235,14 @@ func TestAuthorFlowAndPublicEndpoints(t *testing.T) {
 	code, _ = call(r, "PATCH", secondPath+"/toggle-publish", other, nil)
 	assert.Equal(t, 403, code)
 
-	// publik
+	// publik (tanpa data internal & filter kategori case-insensitive)
 	code, out = call(r, "GET", "/public/posts", "", nil)
 	assert.Equal(t, 200, code)
 	assert.Len(t, dataList(out), 1)
-	code, out = call(r, "GET", "/public/posts?q=KONTEN&category=Bisnis", "", nil)
+	rawPub, _ := json.Marshal(out["data"])
+	assert.NotContains(t, strings.ToLower(string(rawPub)), "user_id")
+	assert.NotContains(t, strings.ToLower(string(rawPub)), "password")
+	code, out = call(r, "GET", "/public/posts?q=KONTEN&category=bisnis", "", nil)
 	assert.Equal(t, 200, code)
 	assert.Len(t, dataList(out), 1)
 	code, out = call(r, "GET", "/public/posts?q=tidak-ada", "", nil)
@@ -248,6 +251,8 @@ func TestAuthorFlowAndPublicEndpoints(t *testing.T) {
 	code, out = call(r, "GET", "/public/posts/judul-baru", "", nil)
 	assert.Equal(t, 200, code)
 	assert.Equal(t, "Judul Baru", dataMap(out)["title"])
+	rawDetail, _ := json.Marshal(out["data"])
+	assert.NotContains(t, strings.ToLower(string(rawDetail)), "user_id")
 	code, _ = call(r, "GET", "/public/posts/belajar-golang-gin-2", "", nil)
 	assert.Equal(t, 404, code)
 
