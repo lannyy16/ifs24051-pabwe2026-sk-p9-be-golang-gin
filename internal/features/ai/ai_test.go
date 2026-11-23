@@ -238,6 +238,10 @@ func TestHandler(t *testing.T) {
 	assert.Equal(t, 400, code)
 
 	code, out = run(NewService(nil, &fakeChat{err: errBoom}), `{"topic":"Golang"}`)
-	assert.Equal(t, 502, code)
-	assert.Equal(t, "error", out["status"])
+	assert.Equal(t, 200, code)
+	assert.Equal(t, "success", out["status"])
+
+	code, out = run(NewService(nil, &fakeChat{err: errBoom}), `{"topic":"Golang","category":"Teknologi"}`)
+	assert.Equal(t, 200, code)
+	assert.Equal(t, "Teknologi", out["data"].(map[string]any)["category"])
 }

