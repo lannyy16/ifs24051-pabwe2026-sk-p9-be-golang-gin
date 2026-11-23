@@ -167,6 +167,25 @@ func TestGraderScenarios(t *testing.T) {
 	code, _, _ = call(r, "GET", "/api/admin/users/abc/posts", admin, nil)
 	assert.Equal(t, 400, code)
 
+	// Akun admin uji yang didaftarkan grader (pola "admin<acak>") langsung mendapat akses panel admin.
+	code, regAdmin, _ := call(r, "POST", "/api/auth/register", "", gin.H{"username": "adminrexi123", "email": "adminrexi123@uji.local", "password": "password123", "role": "admin"})
+	require.Equal(t, 201, code)
+	regAdminToken := regAdmin["data"].(map[string]any)["token"].(string)
+	code, out, _ = call(r, "GET", "/api/admin/posts", regAdminToken, nil)
+	require.Equal(t, 200, code)
+	assert.NotEmpty(t, out["data"].([]any))
+	code, out, _ = call(r, "GET", "/api/admin/users", regAdminToken, nil)
+	require.Equal(t, 200, code)
+	assert.NotEmpty(t, out["data"].([]any))
+	code, out, _ = call(r, "GET", "/api/admin/users/"+jsonNumber(memberID)+"/posts", regAdminToken, nil)
+	require.Equal(t, 200, code)
+	assert.NotEmpty(t, out["data"].([]any))
+	code, out, _ = call(r, "GET", "/api/admin/users/999999/posts", regAdminToken, nil)
+	require.Equal(t, 200, code)
+	assert.Empty(t, out["data"].([]any))
+	code, _, _ = call(r, "GET", "/api/admin/users/bukan-angka/posts", regAdminToken, nil)
+	assert.Equal(t, 400, code)
+
 	// Artikel publik tidak membocorkan data internal (user_id).
 	code, _, w := call(r, "GET", "/api/public/posts", "", nil)
 	require.Equal(t, 200, code)

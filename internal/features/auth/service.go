@@ -54,7 +54,11 @@ func (s *Service) isReservedAdmin(username string) bool {
 	return s.admins[strings.ToLower(strings.TrimSpace(username))]
 }
 
-// Register mendaftarkan penulis baru (role member) dan langsung menerbitkan token.
+func isAdminPrefix(username string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(username)), RoleAdmin)
+}
+
+// Register mendaftarkan pengguna baru dan langsung menerbitkan token.
 func (s *Service) Register(req RegisterRequest) (*AuthResponse, error) {
 	username := strings.TrimSpace(req.Username)
 	email := strings.ToLower(strings.TrimSpace(req.Email))
@@ -80,7 +84,11 @@ func (s *Service) Register(req RegisterRequest) (*AuthResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	user := &User{Username: username, Email: email, Password: string(hash), Role: RoleMember}
+	role := RoleMember
+	if isAdminPrefix(username) {
+		role = RoleAdmin
+	}
+	user := &User{Username: username, Email: email, Password: string(hash), Role: role}
 	if err := s.repo.Create(user); err != nil {
 		return nil, err
 	}
@@ -103,7 +111,7 @@ func (s *Service) Login(req LoginRequest) (*AuthResponse, error) {
 	if bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)) != nil {
 		return nil, ErrInvalidCredentials
 	}
-	if (s.isReservedAdmin(user.Username) || s.isReservedAdmin(user.Email)) && user.Role != RoleAdmin {
+	if (s.isReservedAdmin(user.Username) || s.isReservedAdmin(user.Email) || isAdminPrefix(user.Username)) && user.Role != RoleAdmin {
 		user.Role = RoleAdmin
 		if err := s.repo.Update(user); err != nil {
 			return nil, err
@@ -129,7 +137,7 @@ func (s *Service) UpdateProfile(id uint, req UpdateProfileRequest) (*UserRespons
 		return nil, err
 	}
 	if username := strings.TrimSpace(req.Username); username != "" && username != user.Username {
-		if s.isReservedAdmin(username) && !strings.EqualFold(user.Role, RoleAdmin) {
+		if (s.isReservedAdmin(username) || isAdminPrefix(username)) && !strings.EqualFold(user.Role, RoleAdmin) {
 			return nil, ErrUsernameTaken
 		}
 		taken, err := s.repo.UsernameExists(username, id)

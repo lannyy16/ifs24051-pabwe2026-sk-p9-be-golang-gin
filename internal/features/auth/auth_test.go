@@ -281,16 +281,23 @@ func TestReservedAdminSelfHealAndRegisterBlock(t *testing.T) {
 	assert.ErrorIs(t, err, ErrUsernameTaken)
 	_, err = svc.Register(RegisterRequest{Username: "boss", Email: "x2@x.id", Password: "123456"})
 	assert.ErrorIs(t, err, ErrUsernameTaken)
-	res, err = svc.Register(RegisterRequest{Username: "biasa", Email: "x3@x.id", Password: "123456"})
+	res, err = svc.Register(RegisterRequest{Username: "biasa", Email: "x3@x.id", Password: "123456", Role: RoleAdmin})
 	require.NoError(t, err)
 	assert.Equal(t, RoleMember, res.User.Role)
+
+	// Akun uji berawalan "admin" (bukan exact "admin" bawaan) mendapat role admin.
+	adminUji, err := svc.Register(RegisterRequest{Username: "adminrexi123", Email: "adminrexi123@uji.local", Password: "123456", Role: RoleAdmin})
+	require.NoError(t, err)
+	assert.Equal(t, RoleAdmin, adminUji.User.Role)
 
 	// Gagal menyimpan pemulihan role => error diteruskan.
 	require.NoError(t, db.Model(&User{}).Where("username = ?", "admin").Update("role", RoleMember).Error)
 	_, err = NewService(&fakeRepo{Repository: real, failUpdate: true}, secret).WithAdmins("admin").Login(LoginRequest{Email: "admin@delcom.org", Password: "admin1"})
 	assert.ErrorIs(t, err, errBoom)
 
-	// Member tidak boleh mengganti username-nya ke username admin cadangan.
+	// Member tidak boleh mengganti username-nya ke username admin cadangan atau awalan admin.
 	_, err = svc.UpdateProfile(res.User.ID, UpdateProfileRequest{Username: "boss"})
+	assert.ErrorIs(t, err, ErrUsernameTaken)
+	_, err = svc.UpdateProfile(res.User.ID, UpdateProfileRequest{Username: "admin_palsu"})
 	assert.ErrorIs(t, err, ErrUsernameTaken)
 }
